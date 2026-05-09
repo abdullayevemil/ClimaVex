@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RegionType {
+  FARM
+  DISTRICT
+  PORTFOLIO
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Locale {
+  EN
+  AZ
+  TR
+}
+
+enum LoanApplicationStatus {
+  PENDING_REVIEW
+  UNDER_REVIEW
+  APPROVED_WITH_CONDITIONS
+  DECLINED
+}
+
+model Region {
+  id              String             @id @default(cuid())
+  name            String
+  type            RegionType
+  country         String
+  latitude        Float
+  longitude       Float
+  areaHectares    Float
+  cropType        String
+  boundaryCoordinates String?
+  createdAt       DateTime           @default(now())
+  climateSnapshots ClimateSnapshot[]
+  riskAssessments RiskAssessment[]
+  portfolioRegions PortfolioRegion[]
+  translations    RegionTranslation[]
+  loanApplications LoanApplication[]
+  climateAlerts   ClimateAlert[]
+
+  @@index([type])
+  @@index([country])
+}
+
+model RegionTranslation {
+  id       String @id @default(cuid())
+  regionId String
+  region   Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  locale   Locale
+  name     String
+  country  String
+  cropType String
+
+  @@unique([regionId, locale])
+}
+
+model ClimateSnapshot {
+  id              String   @id @default(cuid())
+  regionId        String
+  region          Region   @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  date            DateTime
+  rainfallMm      Float
+  temperatureC    Float
+  soilMoisture    Float
+  vegetationIndex Float
+  droughtIndex    Float
+  floodExposure   Float
+  createdAt       DateTime @default(now())
+
+  @@index([regionId, date])
+}
+
+model RiskAssessment {
+  id                      String    @id @default(cuid())
+  regionId                String
+  region                  Region    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  assessmentDate          DateTime
+  riskLevel               RiskLevel
+  riskScore               Float
+  droughtRisk             Float
+  floodRisk               Float
+  soilRisk                Float
+  yieldVolatilityRisk     Float
+  explanation             String
+  financialInterpretation String
+  recommendation          String
+  createdAt               DateTime  @default(now())
+  translations            RiskAssessmentTranslation[]
+
+  @@index([regionId, assessmentDate])
+  @@index([riskLevel])
+}
+
+model RiskAssessmentTranslation {
+  id                      String         @id @default(cuid())
+  assessmentId            String
+  assessment              RiskAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  locale                  Locale
+  explanation             String
+  financialInterpretation String
+  recommendation          String
+
+  @@unique([assessmentId, locale])
+}
+
+model Portfolio {
+  id              String            @id @default(cuid())
+  name            String
+  institutionName String
+  totalExposure   Float
+  createdAt       DateTime          @default(now())
+  regions         PortfolioRegion[]
+  translations    PortfolioTranslation[]
+}
+
+model PortfolioTranslation {
+  id              String    @id @default(cuid())
+  portfolioId     String
+  portfolio       Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  locale          Locale
+  name            String
+  institutionName String
+
+  @@unique([portfolioId, locale])
+}
+
+model PortfolioRegion {
+  id             String    @id @default(cuid())
+  portfolioId    String
+  portfolio      Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  regionId       String
+  region         Region    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  exposureAmount Float
+
+  @@unique([portfolioId, regionId])
+}
+
+model LoanApplication {
+  id              String                @id @default(cuid())
+  applicantName   String
+  institutionName String
+  regionId        String
+  region          Region                @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  cropType        String
+  areaHectares    Float
+  latitude        Float
+  longitude       Float
+  requestedAmount Float
+  tenorYears      Int
+  status          LoanApplicationStatus @default(PENDING_REVIEW)
+  submittedAt     DateTime
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  translations    LoanApplicationTranslation[]
+  decisions       LoanDecision[]
+  reports         ClimateReport[]
+
+  @@index([regionId])
+  @@index([status])
+}
+
+model LoanApplicationTranslation {
+  id                String          @id @default(cuid())
+  loanApplicationId String
+  loanApplication   LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+  locale            Locale
+  cropType          String
+  locationLabel     String
+
+  @@unique([loanApplicationId, locale])
+}
+
+model LoanDecision {
+  id                         String                @id @default(cuid())
+  loanApplicationId          String
+  loanApplication            LoanApplication       @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+  status                     LoanApplicationStatus
+  maxLtv                     Float
+  provisioningRateAdjustment Float
+  insuranceRequirement       String
+  note                       String
+  decidedBy                  String
+  decidedAt                  DateTime
+  createdAt                  DateTime              @default(now())
+
+  @@index([loanApplicationId])
+}
+
+model ClimateReport {
+  id                String          @id @default(cuid())
+  loanApplicationId String
+  loanApplication   LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+  reportNumber      String          @unique
+  generatedBy       String
+  generatedAt       DateTime
+  summary           String
+  dataSourcesAppendix String
+  createdAt         DateTime        @default(now())
+
+  @@index([loanApplicationId])
+}
+
+model ClimateAlert {
+  id             String                    @id @default(cuid())
+  regionId       String
+  region         Region                    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  severity       RiskLevel
+  title          String
+  triggerType    String
+  message        String
+  exposureAmount Float
+  affectedLoans  Int
+  status         String                    @default("OPEN")
+  createdAt      DateTime                  @default(now())
+  translations   ClimateAlertTranslation[]
+
+  @@index([regionId])
+  @@index([severity])
+  @@index([status])
+}
+
+model ClimateAlertTranslation {
+  id          String       @id @default(cuid())
+  alertId     String
+  alert       ClimateAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  locale      Locale
+  title       String
+  triggerType String
+  message     String
+
+  @@unique([alertId, locale])
+}
