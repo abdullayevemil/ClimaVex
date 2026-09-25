@@ -14,24 +14,45 @@ no AI service present.
 
 ## Quick start
 
-Requires Node 20+ and PostgreSQL 15+ with the PostGIS extension.
+Requires **Node 22+** (Vitest 5 needs it) and PostgreSQL 15+ with PostGIS.
+
+Start the database. Port **5433** is used deliberately — 5432 is usually taken
+by an existing local Postgres:
 
 ```bash
-# 1. A database with PostGIS
-docker run -d --name climavex-db -p 5432:5432 \
-  -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=climavex postgis/postgis:16-3.4
+docker run -d --name climavex-db -p 5433:5432 \
+  -e POSTGRES_PASSWORD=dev \
+  -e POSTGRES_DB=climavex \
+  postgis/postgis:16-3.4
+```
 
-# 2. Configure
-cp .env.example .env        # then set DATABASE_URL and SESSION_SECRET
+Configure, install and run. `.env.example` already points at 5433, so it works
+unchanged:
 
-# 3. Install, migrate, seed
+```bash
+cp .env.example .env
 npm install
 npm run db:setup
 npm run seed
-
-# 4. Run
-npm run dev                 # http://localhost:3000
+npm run dev
 ```
+
+Open <http://localhost:3000>.
+
+<details>
+<summary>If something goes wrong</summary>
+
+| Symptom | Cause and fix |
+|---|---|
+| `Bind for 0.0.0.0:5432 failed: port is already allocated` | Another Postgres owns 5432. The command above uses 5433; clear the half-made container first with `docker rm -f climavex-db`. |
+| `P1010: User was denied access` | `.env` does not match the container. It must read `postgresql://postgres:dev@localhost:5433/climavex?schema=public`. An `.env` left over from an earlier checkout is the usual culprit — overwrite it. |
+| `ENOTEMPTY: rename .../node_modules/esbuild` | An interrupted install left a partial tree. `rm -rf node_modules && npm install`. |
+| `sh: tsx: command not found` | The install did not finish. Same fix as above. |
+| `EBADENGINE ... required: node >=22` | Switch Node: `nvm use 22`. |
+| `Invalid project directory provided, no such directory: .../#` | A trailing `# comment` was pasted with the command. Run the commands without comments. |
+| Apple Silicon: `requested image's platform (linux/amd64) does not match` | Only a warning; the image runs under emulation. For a native build use `imresamu/postgis:16-3.4` instead. |
+
+</details>
 
 The application opens directly onto the map. Sign in with any demo account —
 password `climavex`:
