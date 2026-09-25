@@ -50,7 +50,7 @@ Open <http://localhost:3000>.
 | `sh: tsx: command not found` | The install did not finish. Same fix as above. |
 | `EBADENGINE ... required: node >=22` | Switch Node: `nvm use 22`. |
 | `Invalid project directory provided, no such directory: .../#` | A trailing `# comment` was pasted with the command. Run the commands without comments. |
-| Apple Silicon: `requested image's platform (linux/amd64) does not match` | Only a warning; the image runs under emulation. For a native build use `imresamu/postgis:16-3.4` instead. |
+| Apple Silicon: `requested image's platform (linux/amd64) does not match` | A warning, not an error — the official `postgis/postgis` tags are amd64-only and run fine under emulation. Prefer that. A native arm64 build exists at `imresamu/postgis:16-3.4`, but its arm64 support is self-described as experimental, so it is not worth swapping in just to silence a warning. |
 
 </details>
 
