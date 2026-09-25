@@ -122,7 +122,7 @@ export function PortfolioMonitoringPanel({
                     "aspect-square rounded-[2px] transition hover:scale-125",
                     risk === "LOW" && "bg-emerald-500/70",
                     risk === "MEDIUM" && "bg-amber-500/80",
-                    risk === "HIGH" && "bg-red-600 shadow-sm ring-1 ring-red-800/30",
+                    risk === "HIGH" && "bg-red-600 ring-1 ring-red-800/30",
                   )}
                   title={`${risk} loan ${index + 1}`}
                 />

@@ -4,10 +4,11 @@ import { serializeRiskAssessment } from "@/lib/api-serializers";
 import { dbLocales, normalizeLocale, supportedLocales } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { scoreClimateRisk } from "@/lib/risk-scoring";
+import { readJson } from "@/server/http";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { regionId?: unknown; locale?: unknown };
+    const body = (await readJson(request)) as { regionId?: unknown; locale?: unknown };
     const locale = normalizeLocale(
       typeof body.locale === "string"
         ? body.locale

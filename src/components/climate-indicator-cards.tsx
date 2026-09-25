@@ -79,7 +79,7 @@ export function ClimateIndicatorCards({
             : value.toFixed(0);
 
         return (
-          <Card key={indicator.key} className="shadow-sm">
+          <Card key={indicator.key}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>

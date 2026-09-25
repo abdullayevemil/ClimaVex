@@ -82,7 +82,6 @@ export function RiskTrendChart({
                   contentStyle={{
                     borderRadius: 8,
                     borderColor: "#cbd5e1",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
                   }}
                 />
                 <Area
@@ -106,7 +105,6 @@ export function RiskTrendChart({
                   contentStyle={{
                     borderRadius: 8,
                     borderColor: "#cbd5e1",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
                   }}
                 />
                 <Legend />

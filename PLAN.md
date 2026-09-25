@@ -22,6 +22,34 @@ no paid dependency, no paid tier, and no API key with a bill attached anywhere i
 
 ---
 
+## Revision 2 — scope correction (supersedes conflicting text below)
+
+The user revised the brief after Revision 1 was approved. **Where this section conflicts with
+anything later in the document, this section wins.** Everything not listed here is unchanged.
+
+| # | Change | Effect |
+|---|---|---|
+| **V1** | **Primary users are banks and insurance agencies**, not farmers. They sign in, browse the map, select a farm, get a risk score plus supporting data, and decide whether to work with that farmer. | New `INSURER` role. The bank/insurer assessment journey becomes the headline flow (§7.2 J0). Farmers still define twins, per the PDFs. |
+| **V2** | **No Geoman Split, and no dependency on any paid polygon tooling.** Basic polygon geometry + draw/vertex editing; the user divides it through the UI; sections persist in the database and render back with their crop data. | Already the design — Geoman *free* (MIT) for draw/edit only. Equal-area auto-division is kept because the original brief requires it and it demos well; manual UI division sits alongside it. |
+| **V3** | **Nothing may cost money.** Not commercial, ~3–4 test users, a learning project, not production. | **Protomaps PMTiles pipeline dropped** — unnecessary at this load. OSM tiles direct, with correct attribution and a descriptive `User-Agent`; at 3–4 users this is negligible, non-commercial use. §4.2 audit otherwise stands: every dependency free and open-source. |
+| **V4** | **Quality bar: jury evaluation.** Must be interesting, interactive, and very professional. | No scaling, HA, or ops hardening work. That budget goes into interaction quality, visual polish, and the depth of the demo instead. |
+| **V5** | **Risk score is the product's headline output**, deterministic now and AI-backed later. | `RiskAssessmentProvider` joins `ScenarioImpactProvider` behind the same versioned, deterministic, swappable contract (§10). Still no AI in this phase. |
+| **V6** | Auth.js replaced by **hand-rolled signed-cookie sessions + a DB `Session` table**. | Not a downgrade — a correction. **Auth.js cannot combine the Credentials provider with database sessions**; credentials force the JWT strategy. The user asked for credentials *with* DB sessions, so implementing it directly is the only way to actually deliver that. ~100 lines, bcrypt-hashed passwords, fully testable, zero beta dependencies. |
+| **V7** | Production concerns (tile hosting, HA Postgres, rate limits, GDPR/KVKK, backups) are **out of scope**. | Recorded in §15 as deliberate, not overlooked. |
+
+**Unchanged and still binding:** no AI model or substitute provider; deterministic placeholder only;
+PostGIS + turf hybrid geometry; the object-class authorization split (banks/insurers write finance,
+never geometry); decimal TRY arithmetic; the F1–F5 fixtures; "credit exposure is not credit loss";
+"the bank retains the credit decision"; and the *"Demo simulation — AI model not connected."* banner.
+
+### Verified runtime (this environment)
+
+PostgreSQL 16.15 + **PostGIS 3.4** (`USE_GEOS=1 USE_PROJ=1`) installed and running locally.
+`ST_Area(...::geography)` returns correct m² for a Konya test polygon, so R4's fallback is not needed.
+
+
+---
+
 ## 1. Context
 
 `/home/user/ClimaVex` today is a **working Next.js 15 / Prisma / PostgreSQL bank climate-risk
@@ -1224,3 +1252,73 @@ not erase the due-date shortfall — proving the financial timing is right).
 
 **Ship gate:** the entire script above must pass with **no AI service running and no model
 credentials present** in the environment.
+
+---
+
+# Revision 3 — implementation record
+
+Revisions 1 and 2 are the plan. This section records what was **actually built
+and verified**, and where reality differed from the plan. Written after the
+fact, from the working system.
+
+## Delivered
+
+| Area | State |
+|---|---|
+| Database | PostgreSQL 16.15 + **PostGIS 3.4**, 23 new tables, 2 migrations |
+| Geometry | GeoJSON in, PostGIS-derived `geom` / `areaM2` / centroid via trigger; GIST indexes |
+| Subdivision | Recursive area-bisection in EPSG:5255; deterministic; N = 1…24; equal or custom shares |
+| Domain layer | `geometry`, `finance`, `scenario`, `vulnerability` — pure, no Prisma or Next imports |
+| Auth | Signed-cookie sessions in a DB `Session` table, bcrypt, 4 roles |
+| Authorization | Object-class split, enforced in every route handler |
+| API | 18 route handlers, zod-validated, uniform `{ error, code, details }` |
+| UI | Map workspace: sidebar, inspector (5 tabs), season timeline, layers, legend, sign-in |
+| Seed | 4 Konya farms covering convex / concave / holed / disconnected geometry |
+| Tests | **73 automated tests** + 2 scripted browser journeys, all passing |
+
+## Verified behaviour
+
+- **F1 acceptance example** reproduces exactly, end to end and on screen:
+  ₺300,000 due, ₺180,000 available, **₺120,000 shortfall**, with the assumed
+  eligible ₺120,000 payout arriving 2026-11-14 and *not* closing that gap.
+- **F2** September due / November proceeds: deficit carries forward exactly once.
+- **F3** shared-resource exposure de-duplicates — the Meram well reports
+  ₺700,000 against a naive per-section sum of ₺1,400,000.
+- **Persistence**: divide into 9 → assign crops → save → **full browser reload**
+  → 9 sections and 9 polygons recovered.
+- **Optimistic locking**: a stale write returns 409 naming the current version.
+- **Authorization matrix** (probed over HTTP): farmer-owner 200 / other farmer
+  403 / anonymous 401 on read; geometry writes 403 for bank *and* insurer;
+  finance writes 201 for the bank, 403 for the insurer's read-scope grant.
+- **`463:21` ambiguity**: two demo parcels share it across different mahalle;
+  the API returns 409 with both candidates rather than guessing.
+- **Determinism**: subdivision byte-identical over 50 runs; scenario and risk
+  hashes stable; an unchanged re-run reuses its immutable snapshot.
+- **Immutability**: `UPDATE` on a `ScenarioRun` raises at the database level.
+- **No shadows**: CI guard greps the tree and fails on any `shadow-*` class.
+
+## Where reality differed from the plan
+
+| # | Plan said | What happened |
+|---|---|---|
+| D1 | Auth.js credentials + DB sessions | **Not possible** — Auth.js forces the JWT strategy with its Credentials provider, so database sessions cannot be combined with it. Implemented directly (~100 lines) to actually deliver credentials *with* revocable server-side sessions. |
+| D2 | Subdivision tolerances as planned | Sections are now additionally **clipped to the parent and to previously-emitted sections**, because the project→unproject round-trip left millimetre drift on shared boundaries that integrated into ~20 m² of apparent overspill. Overlap is now exactly **0** by construction rather than merely within tolerance. |
+| D3 | Coordinates at 7 dp | Raised to **8 dp**. At 7 dp (~1.1 cm) independent rounding of a shared vertex produced ~1.4 m² of phantom overlap along a 2 km edge — inside the physical noise floor but enough to trip the 1 m² invariant. |
+| D4 | Containment via `ST_Within(ST_Buffer(geography))` | Replaced. Buffering a geography reprojects and approximates, and was not a reliable envelope. Now measures the **area lying outside the parent** directly. |
+| D5 | — | `polygon-clipping` ships a CJS build with named exports and an ESM build with only a default. A namespace import worked under tsx and silently yielded `undefined` in the production bundle. Both shapes are now resolved once, and clipping failures **throw instead of returning empty geometry** — the original silent catch is what disguised the bug as a "degenerate result". |
+| D6 | — | Re-dividing a field cascade-deleted its **resource links**. They now survive by ordinal, exactly as crop assignments do; otherwise changing N silently detaches a farm from its canal and under-reports shared exposure. |
+| D7 | — | A malformed request body returned 500. Now 400. |
+| D8 | — | The first no-shadow CI guard used an escaped `\\b` and matched nothing, so it passed vacuously. Caught by testing the guard against a known-bad file; now verified to fail on a real shadow. |
+
+## Known limitations
+
+- **Basemap tiles are blocked in the build container**, so the map renders its
+  geometry over a plain background here. The app detects repeated tile errors
+  and says so rather than looking broken. Tiles load normally on a machine with
+  outbound access to the tile host.
+- Turkish crop statistics remain **unverified** (§9); the catalogue ships
+  explicitly provisional.
+- The season timeline restyles panels and the map cursor, but does not yet
+  animate crop-stage fills on the polygons themselves.
+- i18n covers the legacy dashboard; the twin workspace is English-only so far.
+- No automated accessibility audit has been run.

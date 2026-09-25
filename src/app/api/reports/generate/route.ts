@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { serializeClimateReport } from "@/lib/api-serializers";
 import { normalizeLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
+import { readJson } from "@/server/http";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
+    const body = (await readJson(request).catch(() => ({}))) as {
       loanApplicationId?: string;
       locale?: string;
     };

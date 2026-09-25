@@ -10,3 +10,6 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 database/*.sqlite
+
+# Local verification artefacts
+/scratch

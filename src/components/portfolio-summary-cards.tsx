@@ -49,7 +49,7 @@ export function PortfolioSummaryCards({
         const Icon = card.icon;
 
         return (
-          <Card key={card.label} className="shadow-sm">
+          <Card key={card.label}>
             <CardContent className="p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>

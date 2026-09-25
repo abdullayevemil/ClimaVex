@@ -4,6 +4,7 @@ import { buildLoanReviewResult } from "@/lib/loan-workflow";
 import { dbLocales, normalizeLocale, supportedLocales } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { scoreClimateRisk, type ClimateScoringInput } from "@/lib/risk-scoring";
+import { readJson } from "@/server/http";
 
 export async function POST(
   request: Request,
@@ -11,7 +12,7 @@ export async function POST(
 ) {
   try {
     const { id } = await context.params;
-    const body = (await request.json().catch(() => ({}))) as {
+    const body = (await readJson(request).catch(() => ({}))) as {
       locale?: string;
       cropType?: string;
     };
