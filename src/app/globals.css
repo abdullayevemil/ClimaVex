@@ -54,7 +54,6 @@
 .climavex-marker {
   border-radius: 9999px;
   border: 3px solid #ffffff;
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.22);
 }
 
 .climavex-marker-selected {
@@ -74,7 +73,6 @@
 .climavex-risk-tooltip {
   border: 1px solid rgba(148, 163, 184, 0.38);
   border-radius: 8px;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16);
   padding: 0;
 }
 
@@ -103,4 +101,65 @@
   gap: 12px;
   color: #334155;
   font-size: 12px;
+}
+
+/* ── ClimaVex twin workspace ───────────────────────────────────────────── */
+
+.cvx-pin {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 3px solid #ffffff;
+  background: #0f766e;
+  outline: 1px solid rgba(15, 118, 110, 0.35);
+  transition: transform 140ms ease;
+}
+.cvx-pin-demo { background: #b45309; outline-color: rgba(180, 83, 9, 0.35); }
+.cvx-pin-selected { transform: scale(1.45); outline: 3px solid rgba(13, 148, 136, 0.35); outline-offset: 2px; }
+
+.cvx-section { transition: fill-opacity 160ms ease, stroke-width 160ms ease; cursor: pointer; }
+.cvx-section:hover { fill-opacity: 0.72; }
+
+.leaflet-tooltip.cvx-tooltip {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 8px;
+  padding: 0;
+  background: #ffffff;
+}
+.leaflet-tooltip.cvx-tooltip::before { display: none; }
+.cvx-tip { min-width: 170px; padding: 8px 10px; }
+.cvx-tip-title { margin: 0; font-size: 13px; font-weight: 600; color: rgb(2 6 23); }
+.cvx-tip-sub { margin: 2px 0 6px; font-size: 11px; color: rgb(100 116 139); text-transform: capitalize; }
+.cvx-tip-row { display: flex; justify-content: space-between; gap: 14px; margin: 2px 0; font-size: 11px; color: rgb(51 65 85); }
+.cvx-tip-flag { margin: 6px 0 0; font-size: 11px; font-weight: 600; color: rgb(185 28 28); }
+
+/* Keep Geoman's toolbar consistent with the rest of the interface. */
+.leaflet-pm-toolbar .leaflet-buttons-control-button {
+  border-radius: 6px !important;
+  border: 1px solid rgb(226 232 240) !important;
+}
+.leaflet-container { font: inherit; background: #eef2f6; }
+.leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,0.85) !important; }
+
+/* Tabular figures keep money and areas aligned down a column. */
+.cvx-num { font-variant-numeric: tabular-nums; }
+
+/* Basemap tiles unreachable (offline or blocked): explain the plain background
+   instead of leaving what looks like a broken map. Geometry still renders. */
+.cvx-tiles-unavailable::after {
+  content: "Basemap imagery unavailable — check network access to the tile host. Field geometry and measurements are unaffected.";
+  position: absolute;
+  inset-inline: 0;
+  /* Clear the drawing toolbar, which occupies the top-left corner. */
+  top: 58px;
+  z-index: 500;
+  margin-inline: auto;
+  width: max-content;
+  max-width: 90%;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 4px 10px;
+  font-size: 11px;
+  color: rgb(100 116 139);
 }

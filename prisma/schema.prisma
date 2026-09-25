@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
 }
 
 enum RegionType {
@@ -33,22 +35,22 @@ enum LoanApplicationStatus {
 }
 
 model Region {
-  id              String             @id @default(cuid())
-  name            String
-  type            RegionType
-  country         String
-  latitude        Float
-  longitude       Float
-  areaHectares    Float
-  cropType        String
+  id                  String              @id @default(cuid())
+  name                String
+  type                RegionType
+  country             String
+  latitude            Float
+  longitude           Float
+  areaHectares        Float
+  cropType            String
   boundaryCoordinates String?
-  createdAt       DateTime           @default(now())
-  climateSnapshots ClimateSnapshot[]
-  riskAssessments RiskAssessment[]
-  portfolioRegions PortfolioRegion[]
-  translations    RegionTranslation[]
-  loanApplications LoanApplication[]
-  climateAlerts   ClimateAlert[]
+  createdAt           DateTime            @default(now())
+  climateSnapshots    ClimateSnapshot[]
+  riskAssessments     RiskAssessment[]
+  portfolioRegions    PortfolioRegion[]
+  translations        RegionTranslation[]
+  loanApplications    LoanApplication[]
+  climateAlerts       ClimateAlert[]
 
   @@index([type])
   @@index([country])
@@ -83,9 +85,9 @@ model ClimateSnapshot {
 }
 
 model RiskAssessment {
-  id                      String    @id @default(cuid())
+  id                      String                      @id @default(cuid())
   regionId                String
-  region                  Region    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  region                  Region                      @relation(fields: [regionId], references: [id], onDelete: Cascade)
   assessmentDate          DateTime
   riskLevel               RiskLevel
   riskScore               Float
@@ -96,7 +98,7 @@ model RiskAssessment {
   explanation             String
   financialInterpretation String
   recommendation          String
-  createdAt               DateTime  @default(now())
+  createdAt               DateTime                    @default(now())
   translations            RiskAssessmentTranslation[]
 
   @@index([regionId, assessmentDate])
@@ -116,11 +118,11 @@ model RiskAssessmentTranslation {
 }
 
 model Portfolio {
-  id              String            @id @default(cuid())
+  id              String                 @id @default(cuid())
   name            String
   institutionName String
   totalExposure   Float
-  createdAt       DateTime          @default(now())
+  createdAt       DateTime               @default(now())
   regions         PortfolioRegion[]
   translations    PortfolioTranslation[]
 }
@@ -148,21 +150,21 @@ model PortfolioRegion {
 }
 
 model LoanApplication {
-  id              String                @id @default(cuid())
+  id              String                       @id @default(cuid())
   applicantName   String
   institutionName String
   regionId        String
-  region          Region                @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  region          Region                       @relation(fields: [regionId], references: [id], onDelete: Cascade)
   cropType        String
   areaHectares    Float
   latitude        Float
   longitude       Float
   requestedAmount Float
   tenorYears      Int
-  status          LoanApplicationStatus @default(PENDING_REVIEW)
+  status          LoanApplicationStatus        @default(PENDING_REVIEW)
   submittedAt     DateTime
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
   translations    LoanApplicationTranslation[]
   decisions       LoanDecision[]
   reports         ClimateReport[]
@@ -199,15 +201,15 @@ model LoanDecision {
 }
 
 model ClimateReport {
-  id                String          @id @default(cuid())
-  loanApplicationId String
-  loanApplication   LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
-  reportNumber      String          @unique
-  generatedBy       String
-  generatedAt       DateTime
-  summary           String
+  id                  String          @id @default(cuid())
+  loanApplicationId   String
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+  reportNumber        String          @unique
+  generatedBy         String
+  generatedAt         DateTime
+  summary             String
   dataSourcesAppendix String
-  createdAt         DateTime        @default(now())
+  createdAt           DateTime        @default(now())
 
   @@index([loanApplicationId])
 }
@@ -241,4 +243,552 @@ model ClimateAlertTranslation {
   message     String
 
   @@unique([alertId, locale])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ClimaVex Digital Twin
+//
+//  Geometry convention: every geometry-bearing model stores authoritative
+//  GeoJSON (RFC 7946, [lng,lat], EPSG:4326) in `geojson`. A database trigger
+//  derives the PostGIS `geom` column and the spheroidal `areaM2` from it, so
+//  PostGIS remains the single source of truth for area and validity while
+//  Prisma stays fully type-safe. Application code never writes `geom`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  FARMER
+  BANK_USER
+  INSURER
+  ADMIN
+}
+
+enum GrantScope {
+  READ
+  READ_SCENARIO
+  FINANCE_WRITE
+}
+
+enum GeometrySource {
+  USER_DRAWN
+  GEOJSON_IMPORT
+  DEMO_FIXTURE
+  OFFICIAL_ADAPTER
+}
+
+enum VerificationStatus {
+  UNVERIFIED_DRAFT
+  USER_CONFIRMED
+  OFFICIALLY_VERIFIED
+}
+
+enum ResourceType {
+  WELL
+  PUMP
+  CANAL_CONNECTION
+}
+
+enum CashFlowKind {
+  OPENING_RESERVE
+  LOAN_DISBURSEMENT
+  SALE_RECEIPT
+  INSURANCE_PAYOUT
+  OPERATING_COST
+  OTHER_OBLIGATION
+  LOAN_REPAYMENT_DUE
+}
+
+enum CashFlowSource {
+  USER
+  FIXTURE
+  DERIVED
+}
+
+enum ScenarioKind {
+  BASELINE
+  WEATHER_REPLAY
+  RESOURCE_DISRUPTION
+}
+
+enum DateAlignment {
+  CALENDAR_DATE
+  DAY_OF_YEAR
+  ALIGN_TO_PLANTING
+}
+
+enum WeatherDatasetKind {
+  HISTORICAL_OBSERVED
+  DEMO_SYNTHETIC
+}
+
+enum CropStage {
+  DORMANT
+  SOWING
+  EMERGENCE
+  VEGETATIVE
+  FLOWERING
+  GRAIN_FILL
+  MATURITY
+  HARVEST
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole
+  organisation String?
+  locale       Locale   @default(EN)
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  sessions       Session[]
+  farms          Farm[]
+  resources      Resource[]
+  grants         AccessGrant[]       @relation("GrantedTo")
+  borrower       Borrower?
+  scenarios      Scenario[]
+  cashFlowEvents CashFlowEvent[]
+  riskRuns       RiskAssessmentRun[]
+
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Borrower {
+  id              String  @id @default(cuid())
+  userId          String? @unique
+  user            User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name            String
+  institutionName String?
+  isDemo          Boolean @default(false)
+
+  farms  Farm[]
+  loans  Loan[]
+  grants AccessGrant[]
+}
+
+/// The only thing that lets a bank or insurance user reach a twin.
+model AccessGrant {
+  id          String     @id @default(cuid())
+  grantedToId String
+  grantedTo   User       @relation("GrantedTo", fields: [grantedToId], references: [id], onDelete: Cascade)
+  borrowerId  String
+  borrower    Borrower   @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  farmId      String?
+  farm        Farm?      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  scope       GrantScope @default(READ)
+  grantedAt   DateTime   @default(now())
+  revokedAt   DateTime?
+
+  @@unique([grantedToId, borrowerId, farmId])
+  @@index([grantedToId])
+}
+
+model Farm {
+  id                 String                                      @id @default(cuid())
+  ownerUserId        String
+  owner              User                                        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  borrowerId         String?
+  borrower           Borrower?                                   @relation(fields: [borrowerId], references: [id], onDelete: SetNull)
+  name               String
+  description        String?
+  il                 String?
+  ilce               String?
+  /// GeoJSON Polygon or MultiPolygon, RFC 7946, [lng,lat], EPSG:4326.
+  geojson            Json
+  geom               Unsupported("geometry(MultiPolygon,4326)")?
+  /// Spheroidal area in m², maintained by the database trigger.
+  areaM2             Decimal                                     @default(0) @db.Decimal(16, 2)
+  centroidLat        Float                                       @default(0)
+  centroidLng        Float                                       @default(0)
+  geometrySource     GeometrySource                              @default(USER_DRAWN)
+  verificationStatus VerificationStatus                          @default(UNVERIFIED_DRAFT)
+  isDemo             Boolean                                     @default(false)
+  /// Optimistic concurrency token.
+  version            Int                                         @default(1)
+  createdAt          DateTime                                    @default(now())
+  updatedAt          DateTime                                    @updatedAt
+
+  parcels           CadastralParcel[]
+  seasons           Season[]
+  sections          CultivationSection[]
+  loans             Loan[]
+  cashFlowEvents    CashFlowEvent[]
+  insurancePolicies InsurancePolicy[]
+  scenarios         Scenario[]
+  grants            AccessGrant[]
+  riskRuns          RiskAssessmentRun[]
+
+  @@index([ownerUserId])
+  @@index([borrowerId])
+  @@index([isDemo])
+  @@index([geom], type: Gist)
+}
+
+/// A cadastral land unit. `463:21` means ada 463, parsel 21.
+/// The pair is NOT nationally unique — uniqueness requires the full
+/// il / ilçe / mahalle-köy administrative path.
+model CadastralParcel {
+  id                 String                                      @id @default(cuid())
+  farmId             String
+  farm               Farm                                        @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  il                 String
+  ilce               String
+  mahalleKoy         String
+  ada                Int
+  parsel             Int
+  /// Exactly what the user typed, preserved verbatim.
+  originalInput      String
+  /// Officially recorded area, kept strictly separate from computed area.
+  officialAreaM2     Decimal?                                    @db.Decimal(16, 2)
+  geojson            Json?
+  geom               Unsupported("geometry(MultiPolygon,4326)")?
+  areaM2             Decimal                                     @default(0) @db.Decimal(16, 2)
+  geometrySource     GeometrySource                              @default(USER_DRAWN)
+  verificationStatus VerificationStatus                          @default(UNVERIFIED_DRAFT)
+  createdAt          DateTime                                    @default(now())
+
+  sections CultivationSection[]
+
+  @@unique([il, ilce, mahalleKoy, ada, parsel])
+  @@index([ada, parsel])
+  @@index([farmId])
+  @@index([geom], type: Gist)
+}
+
+model Season {
+  id        String   @id @default(cuid())
+  farmId    String
+  farm      Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  name      String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  sections       CultivationSection[]
+  cashFlowEvents CashFlowEvent[]
+  scenarios      Scenario[]
+  riskRuns       RiskAssessmentRun[]
+
+  @@unique([farmId, name])
+  @@index([farmId])
+}
+
+model Crop {
+  id                  String  @id @default(cuid())
+  code                String  @unique
+  nameEn              String
+  nameTr              String
+  colorHex            String
+  isIrrigated         Boolean @default(false)
+  sortOrder           Int     @default(0)
+  isActive            Boolean @default(true)
+  /// Agronomic coefficients used by the deterministic impact rules.
+  heatThresholdC      Float   @default(32)
+  heatPctPerDay       Float   @default(0.9)
+  heatCapPct          Float   @default(28)
+  frostThresholdC     Float   @default(-3)
+  frostPctPerEvent    Float   @default(6)
+  waterRequirementMm  Float   @default(320)
+  droughtMaxPct       Float   @default(35)
+  waterloggingPct     Float   @default(10)
+  irrigationPctPerDay Float   @default(1.4)
+  irrigationCapPct    Float   @default(40)
+
+  sections    CultivationSection[]
+  assumptions CropAssumption[]
+  stages      CropCalendarStage[]
+  defaults    RegionalCropDefault[]
+}
+
+model CropAssumption {
+  id               String  @id @default(cuid())
+  cropId           String
+  crop             Crop    @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  regionCode       String
+  year             Int
+  yieldTPerHa      Decimal @db.Decimal(10, 3)
+  priceTryPerT     Decimal @db.Decimal(14, 2)
+  costTryPerHa     Decimal @db.Decimal(14, 2)
+  source           String
+  isDemoAssumption Boolean @default(true)
+
+  @@unique([cropId, regionCode, year])
+}
+
+model CropCalendarStage {
+  id               String    @id @default(cuid())
+  cropId           String
+  crop             Crop      @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  regionCode       String
+  stage            CropStage
+  /// Offsets in days from the planting date; supports seasons crossing new year.
+  startOffsetDays  Int
+  endOffsetDays    Int
+  isSensitive      Boolean   @default(false)
+  source           String
+  isDemoAssumption Boolean   @default(true)
+
+  @@unique([cropId, regionCode, stage])
+}
+
+model RegionalCropDefault {
+  id         String @id @default(cuid())
+  regionCode String
+  cropId     String
+  crop       Crop   @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  rank       Int
+
+  @@unique([regionCode, cropId])
+}
+
+/// A user-created crop area inside a farm. Never carries a cadastral identifier:
+/// it is identified by an ordinal (Section A, B, C…) and keeps a reference to
+/// its parent parcel.
+model CultivationSection {
+  id                 String                                      @id @default(cuid())
+  seasonId           String
+  season             Season                                      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  farmId             String
+  farm               Farm                                        @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  parcelId           String?
+  parcel             CadastralParcel?                            @relation(fields: [parcelId], references: [id], onDelete: SetNull)
+  ordinal            Int
+  label              String
+  geojson            Json
+  geom               Unsupported("geometry(MultiPolygon,4326)")?
+  areaM2             Decimal                                     @default(0) @db.Decimal(16, 2)
+  isMultipart        Boolean                                     @default(false)
+  cropId             String
+  crop               Crop                                        @relation(fields: [cropId], references: [id])
+  plantingDate       DateTime                                    @db.Date
+  harvestWindowStart DateTime                                    @db.Date
+  harvestWindowEnd   DateTime                                    @db.Date
+  expectedSaleDate   DateTime                                    @db.Date
+  /// Per-section overrides of the regional crop assumptions.
+  yieldTPerHa        Decimal                                     @db.Decimal(10, 3)
+  priceTryPerT       Decimal                                     @db.Decimal(14, 2)
+  costTryPerHa       Decimal                                     @db.Decimal(14, 2)
+  createdAt          DateTime                                    @default(now())
+  updatedAt          DateTime                                    @updatedAt
+
+  resourceLinks ResourceLink[]
+
+  @@unique([seasonId, ordinal])
+  @@index([farmId])
+  @@index([cropId])
+  @@index([geom], type: Gist)
+}
+
+model Resource {
+  id          String                                  @id @default(cuid())
+  ownerUserId String
+  owner       User                                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name        String
+  type        ResourceType
+  /// GeoJSON Point (well/pump) or LineString (canal connection).
+  geojson     Json
+  geom        Unsupported("geometry(Geometry,4326)")?
+  capacityLpm Int?
+  isDemo      Boolean                                 @default(false)
+  createdAt   DateTime                                @default(now())
+
+  links ResourceLink[]
+
+  @@index([ownerUserId])
+  @@index([geom], type: Gist)
+}
+
+model ResourceLink {
+  id         String             @id @default(cuid())
+  resourceId String
+  resource   Resource           @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  sectionId  String
+  section    CultivationSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sharePct   Float              @default(100)
+
+  @@unique([resourceId, sectionId])
+  @@index([sectionId])
+}
+
+model Loan {
+  id                   String    @id @default(cuid())
+  borrowerId           String
+  borrower             Borrower  @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  farmId               String
+  farm                 Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  reference            String
+  principal            Decimal   @db.Decimal(18, 2)
+  outstandingPrincipal Decimal   @db.Decimal(18, 2)
+  interestRatePct      Decimal   @db.Decimal(9, 4)
+  startDate            DateTime  @db.Date
+  endDate              DateTime  @db.Date
+  createdByUserId      String?
+  createdByRole        UserRole?
+  createdAt            DateTime  @default(now())
+
+  schedule       RepaymentScheduleItem[]
+  cashFlowEvents CashFlowEvent[]
+
+  @@index([borrowerId])
+  @@index([farmId])
+}
+
+model RepaymentScheduleItem {
+  id       String   @id @default(cuid())
+  loanId   String
+  loan     Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  sequence Int
+  dueDate  DateTime @db.Date
+  amount   Decimal  @db.Decimal(18, 2)
+
+  @@unique([loanId, sequence])
+  @@index([loanId, dueDate])
+}
+
+model CashFlowEvent {
+  id              String         @id @default(cuid())
+  seasonId        String
+  season          Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  farmId          String
+  farm            Farm           @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  loanId          String?
+  loan            Loan?          @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  kind            CashFlowKind
+  date            DateTime       @db.Date
+  amount          Decimal        @db.Decimal(18, 2)
+  label           String
+  source          CashFlowSource @default(USER)
+  createdByUserId String?
+  createdBy       User?          @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByRole   UserRole?
+  createdAt       DateTime       @default(now())
+
+  @@index([farmId, date])
+  @@index([seasonId])
+}
+
+model InsurancePolicy {
+  id                 String    @id @default(cuid())
+  farmId             String
+  farm               Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  provider           String
+  eligibleHazards    String[]
+  coverageLimit      Decimal   @db.Decimal(18, 2)
+  deductible         Decimal   @db.Decimal(18, 2)
+  assumedEligibility Boolean   @default(true)
+  payoutLagDays      Int       @default(45)
+  /// Insurance terms are user-entered or fixture data — never current TARSIM rules.
+  isDemoAssumption   Boolean   @default(true)
+  source             String    @default("User-entered demo assumption")
+  verifiedAt         DateTime?
+  createdByUserId    String?
+  createdByRole      UserRole?
+  createdAt          DateTime  @default(now())
+
+  @@index([farmId])
+}
+
+model WeatherDataset {
+  id            String             @id @default(cuid())
+  name          String
+  kind          WeatherDatasetKind
+  provenance    String
+  attribution   String
+  stationOrGrid String
+  startDate     DateTime           @db.Date
+  endDate       DateTime           @db.Date
+  license       String
+  createdAt     DateTime           @default(now())
+
+  observations WeatherObservation[]
+  scenarios    Scenario[]
+}
+
+model WeatherObservation {
+  id        String         @id @default(cuid())
+  datasetId String
+  dataset   WeatherDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  date      DateTime       @db.Date
+  tMaxC     Float
+  tMinC     Float
+  precipMm  Float
+
+  @@unique([datasetId, date])
+  @@index([datasetId, date])
+}
+
+model Scenario {
+  id               String          @id @default(cuid())
+  farmId           String
+  farm             Farm            @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  seasonId         String
+  season           Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name             String
+  kind             ScenarioKind
+  weatherDatasetId String?
+  weatherDataset   WeatherDataset? @relation(fields: [weatherDatasetId], references: [id], onDelete: SetNull)
+  dateAlignment    DateAlignment   @default(ALIGN_TO_PLANTING)
+  params           Json            @default("{}")
+  createdByUserId  String?
+  createdBy        User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+
+  runs ScenarioRun[]
+
+  @@index([farmId])
+}
+
+/// Append-only. A database trigger rejects UPDATE and DELETE so a scenario
+/// snapshot can never be rewritten after the fact.
+model ScenarioRun {
+  id                  String   @id @default(cuid())
+  scenarioId          String
+  scenario            Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  inputHash           String
+  providerType        String
+  providerVersion     String
+  rulesetVersion      String
+  resultJson          Json
+  financialResultJson Json
+  createdAt           DateTime @default(now())
+
+  @@unique([scenarioId, inputHash, providerVersion])
+  @@index([scenarioId])
+}
+
+/// The headline output for bank and insurance users: a deterministic,
+/// explainable risk score for one farm/season. Replaced by the trained model
+/// later, behind the same contract.
+model RiskAssessmentRun {
+  id              String    @id @default(cuid())
+  farmId          String
+  farm            Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  seasonId        String
+  season          Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  requestedById   String?
+  requestedBy     User?     @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  inputHash       String
+  providerType    String
+  providerVersion String
+  score           Float
+  band            RiskLevel
+  resultJson      Json
+  createdAt       DateTime  @default(now())
+
+  @@unique([farmId, seasonId, inputHash, providerVersion])
+  @@index([farmId])
 }

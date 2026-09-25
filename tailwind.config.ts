@@ -56,9 +56,6 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      boxShadow: {
-        "soft-card": "0 14px 34px rgba(15, 23, 42, 0.07)",
-      },
     },
   },
   plugins: [],

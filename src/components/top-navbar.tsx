@@ -13,17 +13,17 @@ export function TopNavbar() {
   const pathname = usePathname();
   const { dictionary } = useI18n();
   const navLinks = [
-    { href: "/", label: dictionary.nav.dashboard },
-    { href: "/regions", label: dictionary.nav.regions },
-    { href: "/portfolio", label: dictionary.nav.portfolio },
-    { href: "/reports", label: dictionary.nav.reports },
+    { href: "/bank", label: dictionary.nav.dashboard },
+    { href: "/bank/regions", label: dictionary.nav.regions },
+    { href: "/bank/portfolio", label: dictionary.nav.portfolio },
+    { href: "/bank/reports", label: dictionary.nav.reports },
   ];
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="flex h-16 items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-white shadow-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-white">
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>

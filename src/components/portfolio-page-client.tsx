@@ -118,7 +118,6 @@ export function PortfolioPageClient() {
                   portfolio.riskCounts.MEDIUM +
                   portfolio.riskCounts.HIGH;
                 const percent = total ? (count / total) * 100 : 0;
-                const meta = riskMeta[level];
 
                 return (
                   <div key={level} className="space-y-2">

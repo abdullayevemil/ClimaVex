@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { useI18n } from "@/components/locale-provider";
 import { fetchJson } from "@/lib/fetch-json";
 import { riskMeta } from "@/lib/risk-ui";
@@ -691,7 +690,6 @@ function FactorContributionChart({ review }: { review: LoanReviewResult }) {
             contentStyle={{
               borderRadius: "8px",
               borderColor: "#cbd5e1",
-              boxShadow: "0 10px 28px rgba(15, 23, 42, 0.12)",
             }}
           />
           <ReferenceLine x={0} stroke="#94a3b8" />

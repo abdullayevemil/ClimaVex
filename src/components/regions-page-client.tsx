@@ -72,7 +72,7 @@ export function RegionsPageClient() {
             {dictionary.regionsPage.subtitle}
           </p>
         </div>
-        <div className="flex h-10 w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-500 shadow-sm lg:w-80">
+        <div className="flex h-10 w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-500 lg:w-80">
           <Search className="h-4 w-4" />
           <input
             value={query}

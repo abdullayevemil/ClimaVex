@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
   FileText,
   Gauge,
   Landmark,
@@ -17,10 +16,10 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { dictionary } = useI18n();
   const links = [
-    { href: "/", label: dictionary.nav.dashboard, icon: Gauge },
-    { href: "/regions", label: dictionary.nav.regions, icon: MapPinned },
-    { href: "/portfolio", label: dictionary.nav.portfolio, icon: Landmark },
-    { href: "/reports", label: dictionary.nav.reports, icon: FileText },
+    { href: "/bank", label: dictionary.nav.dashboard, icon: Gauge },
+    { href: "/bank/regions", label: dictionary.nav.regions, icon: MapPinned },
+    { href: "/bank/portfolio", label: dictionary.nav.portfolio, icon: Landmark },
+    { href: "/bank/reports", label: dictionary.nav.reports, icon: FileText },
   ];
 
   return (

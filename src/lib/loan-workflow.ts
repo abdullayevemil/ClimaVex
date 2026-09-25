@@ -332,9 +332,9 @@ function dataSources(input: ClimateScoringInput, locale: Locale): DataSourceSign
 
 export function buildLoanReviewResult({
   cropType,
-  regionName,
-  requestedAmount,
-  tenorYears,
+  regionName: _regionName,
+  requestedAmount: _requestedAmount,
+  tenorYears: _tenorYears,
   climate,
   locale = "en",
 }: LoanReviewInput): LoanReviewResult {
