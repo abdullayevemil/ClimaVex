@@ -1189,6 +1189,11 @@ Coverage gate: **90% on `src/domain/`**, which is where correctness actually liv
 
 ## 16. Future AI integration — *outside the current scope*
 
+> **Update:** this is now implemented for the risk score — see the README's
+> "AI model" section. The ML service turned out to measure and forecast
+> regional climate rather than per-section yield deltas, so it sits behind
+> `RiskAssessmentProvider`; `ScenarioImpactProvider` stays rule-based.
+
 ### 16.1 The adapter
 
 When the trained model is ready, integration should be **only** this:

@@ -8,6 +8,7 @@
     "start": "NODE_OPTIONS=--no-experimental-webstorage next start",
     "prisma:push": "prisma db push",
     "seed": "tsx prisma/seed-twin.ts",
+    "seed:bank": "tsx prisma/seed.ts",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",

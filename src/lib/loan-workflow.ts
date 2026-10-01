@@ -330,6 +330,152 @@ function dataSources(input: ClimateScoringInput, locale: Locale): DataSourceSign
   ];
 }
 
+const SSP_LABEL: Record<string, LongRangeProjection["scenario"]> = {
+  ssp2_4_5: "SSP2-4.5",
+  ssp5_8_5: "SSP5-8.5",
+};
+
+/** The slice of the ML service's answer a loan review is built from. */
+export type LoanReviewEvidence = {
+  latest: {
+    asOf: string | null;
+    riskScore: number;
+    subScores: { drought: number; flood: number; heat: number; soil: number; vegetation: number };
+    rainfallMm: number;
+    soilMoisturePct: number;
+    vegetationIndex: number;
+  };
+  forecast: { targetYear: number; targetMonth: number; predictedSoilAnomaly: number; modelSkill: { correlation?: number | null } } | null;
+  projections: {
+    model: string;
+    profiles: Array<{ scenario: string; horizon: number | null; period: string | null; meanAnnualRisk: number; peakRisk: number; peakMonth: number }>;
+  } | null;
+  health: { serviceVersion: string; modelTrainedAt?: string | null };
+};
+
+/**
+ * The loan review built from the ML service instead of the heuristic.
+ *
+ * The score is the measured climate-stress index, unadjusted: no crop
+ * multiplier is applied to a measurement. Factors are the index's own five
+ * sub-scores, projections are the CMIP6 ensemble's, and where the service has
+ * no figure (a confidence interval, the SSP1-2.6 pathway) none is invented.
+ * The lending terms remain the bank-policy rule they always were.
+ */
+export function buildLoanReviewFromModel(
+  { latest, forecast, projections, health }: LoanReviewEvidence,
+  locale: Locale,
+  latencyMs: number,
+): LoanReviewResult {
+  const riskScore = round(latest.riskScore);
+  const score5 = round(riskScore / 20);
+  const asOf = latest.asOf ?? "—";
+  const t = {
+    en: {
+      labels: ["Drought stress", "Heat stress", "Soil moisture deficit", "Flood exposure", "Vegetation stress"],
+      sub: (name: string, value: number) => `Measured ${name} sub-score ${value.toFixed(0)}/100 for ${asOf}, from the climate-stress index.`,
+      names: ["drought", "heat", "soil-deficit", "flood", "vegetation"],
+      present: (base: number) => `Present-day baseline from the same method: mean annual climate-stress index ${base.toFixed(1)}/100.`,
+      projected: (p: { period: string | null; meanAnnualRisk: number; peakRisk: number; peakMonth: number }, base: number | null) =>
+        `${projections?.model}, ${p.period}: mean annual climate-stress index ${p.meanAnnualRisk.toFixed(1)}/100${base == null ? "" : ` against a ${base.toFixed(1)} baseline`}, peaking at ${p.peakRisk.toFixed(0)} in month ${p.peakMonth}.`,
+      observed: "Latest observed month",
+      measuredMode: "ClimaVex ML service · measured",
+      forecastMode: `XGBoost prediction${forecast?.modelSkill.correlation == null ? "" : ` · held-out correlation ${forecast.modelSkill.correlation.toFixed(2)}`}`,
+      soil: "ERA5 soil moisture",
+      rain: "ERA5 rainfall",
+      forecastLabel: "Root-zone drought forecast",
+      mode: "ClimaVex ML service",
+      modeDetail: "measured climate-stress index + XGBoost drought forecast",
+    },
+    az: {
+      labels: ["Quraqlıq stressi", "İstilik stressi", "Torpaq rütubəti çatışmazlığı", "Daşqın ekspozisiyası", "Bitki örtüyü stressi"],
+      sub: (name: string, value: number) => `${asOf} üçün iqlim stressi indeksindən ölçülmüş ${name} alt balı: ${value.toFixed(0)}/100.`,
+      names: ["quraqlıq", "istilik", "torpaq çatışmazlığı", "daşqın", "bitki örtüyü"],
+      present: (base: number) => `Eyni metodla cari dövr bazası: orta illik iqlim stressi indeksi ${base.toFixed(1)}/100.`,
+      projected: (p: { period: string | null; meanAnnualRisk: number; peakRisk: number; peakMonth: number }, base: number | null) =>
+        `${projections?.model}, ${p.period}: orta illik iqlim stressi indeksi ${p.meanAnnualRisk.toFixed(1)}/100${base == null ? "" : ` (baza ${base.toFixed(1)})`}, ${p.peakMonth}-ci ayda ${p.peakRisk.toFixed(0)} ilə pik.`,
+      observed: "Son müşahidə olunan ay",
+      measuredMode: "ClimaVex ML xidməti · ölçülmüş",
+      forecastMode: `XGBoost proqnozu${forecast?.modelSkill.correlation == null ? "" : ` · test korrelyasiyası ${forecast.modelSkill.correlation.toFixed(2)}`}`,
+      soil: "ERA5 torpaq rütubəti",
+      rain: "ERA5 yağıntı",
+      forecastLabel: "Kök zonası quraqlıq proqnozu",
+      mode: "ClimaVex ML xidməti",
+      modeDetail: "ölçülmüş iqlim stressi indeksi + XGBoost quraqlıq proqnozu",
+    },
+    tr: {
+      labels: ["Kuraklık stresi", "Sıcaklık stresi", "Toprak nemi açığı", "Sel maruziyeti", "Bitki örtüsü stresi"],
+      sub: (name: string, value: number) => `${asOf} için iklim stresi endeksinden ölçülen ${name} alt skoru: ${value.toFixed(0)}/100.`,
+      names: ["kuraklık", "sıcaklık", "toprak açığı", "sel", "bitki örtüsü"],
+      present: (base: number) => `Aynı yöntemle günümüz baz profili: yıllık ortalama iklim stresi endeksi ${base.toFixed(1)}/100.`,
+      projected: (p: { period: string | null; meanAnnualRisk: number; peakRisk: number; peakMonth: number }, base: number | null) =>
+        `${projections?.model}, ${p.period}: yıllık ortalama iklim stresi endeksi ${p.meanAnnualRisk.toFixed(1)}/100${base == null ? "" : ` (baz ${base.toFixed(1)})`}, ${p.peakMonth}. ayda ${p.peakRisk.toFixed(0)} ile zirve.`,
+      observed: "Son gözlenen ay",
+      measuredMode: "ClimaVex ML servisi · ölçülen",
+      forecastMode: `XGBoost tahmini${forecast?.modelSkill.correlation == null ? "" : ` · test korelasyonu ${forecast.modelSkill.correlation.toFixed(2)}`}`,
+      soil: "ERA5 toprak nemi",
+      rain: "ERA5 yağış",
+      forecastLabel: "Kök bölgesi kuraklık tahmini",
+      mode: "ClimaVex ML servisi",
+      modeDetail: "ölçülen iklim stresi endeksi + XGBoost kuraklık tahmini",
+    },
+  }[locale];
+
+  const s = latest.subScores;
+  const ids = ["drought", "temperature", "soil", "flood", "vegetation"] as const;
+  const values = [s.drought, s.heat, s.soil, s.flood, s.vegetation];
+
+  const baseline = projections?.profiles.find((p) => p.scenario === "baseline")?.meanAnnualRisk ?? null;
+  const pathways = (projections?.profiles ?? []).filter((p) => SSP_LABEL[p.scenario] && (p.horizon === 2030 || p.horizon === 2050));
+  // The first point on the timeline is the ensemble's own present-day profile,
+  // not this month's reading: an annual mean is only comparable to an annual mean.
+  const present = baseline == null ? [] : [{ score5: round(baseline / 20), note: t.present(baseline) }];
+  const projected: LongRangeProjection[] = [...new Set(pathways.map((p) => p.scenario))].flatMap((scenario) => [
+    ...present.map((p) => ({ scenario: SSP_LABEL[scenario], year: 2026 as const, score5: p.score5, riskLevel: score5ToLevel(p.score5), note: p.note })),
+    ...pathways
+      .filter((p) => p.scenario === scenario)
+      .map((p) => {
+        const projectedScore5 = round(p.meanAnnualRisk / 20);
+        return {
+          scenario: SSP_LABEL[scenario],
+          year: p.horizon as 2030 | 2050,
+          score5: projectedScore5,
+          riskLevel: score5ToLevel(projectedScore5),
+          note: t.projected(p, baseline),
+        };
+      }),
+  ]);
+
+  const trained = health.modelTrainedAt ? `, ${health.modelTrainedAt.slice(0, 10)}` : "";
+  const sources: DataSourceSignal[] = [
+    { label: "Sentinel-2 NDVI", window: `${t.observed} · ${asOf}`, value: latest.vegetationIndex.toFixed(2), mode: t.measuredMode },
+    { label: t.rain, window: `${t.observed} · ${asOf}`, value: `${latest.rainfallMm.toFixed(0)} mm`, mode: t.measuredMode },
+    { label: t.soil, window: `${t.observed} · ${asOf}`, value: `${latest.soilMoisturePct.toFixed(0)}%`, mode: t.measuredMode },
+  ];
+  if (forecast) {
+    sources.push({
+      label: t.forecastLabel,
+      window: `${String(forecast.targetMonth).padStart(2, "0")}/${forecast.targetYear}`,
+      value: `${forecast.predictedSoilAnomaly >= 0 ? "+" : ""}${forecast.predictedSoilAnomaly.toFixed(2)}σ`,
+      mode: t.forecastMode,
+    });
+  }
+
+  return {
+    riskScore,
+    score5,
+    riskLevel: getRiskLevel(riskScore),
+    displayLevel: displayLevel(score5, locale),
+    modelMode: `${t.mode} v${health.serviceVersion}${trained} — ${t.modeDetail}`,
+    latencyMs,
+    // Sub-scores on a 0–1 scale, which is the range the breakdown chart draws.
+    factorContributions: ids.map((id, i) => ({ id, label: t.labels[i], value: round(values[i] / 100, 2), explanation: t.sub(t.names[i], values[i]) })),
+    projections: projected,
+    creditRecommendation: creditRecommendation(score5, locale),
+    dataSources: sources,
+  };
+}
+
 export function buildLoanReviewResult({
   cropType,
   regionName: _regionName,

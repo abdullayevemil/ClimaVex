@@ -165,9 +165,17 @@ export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; ln
 /**
  * The model region covering a point. Coordinates are matched here rather than
  * sent to the service, so a farm's location never leaves this application.
+ *
+ * A dashboard region that shares its name with a model region (the two repos
+ * seed the same six, with slightly different id suffixes) is matched by id
+ * first: two model regions can sit a few kilometres apart in distance terms.
  */
-export async function nearestRegion(point: { lat: number; lng: number }) {
-  const ranked = (await getRegions())
+export async function nearestRegion(point: { lat: number; lng: number; id?: string }) {
+  const all = await getRegions();
+  const named = point.id ? all.find((region) => point.id!.startsWith(region.id)) : undefined;
+  if (named) return { region: named, distanceKm: distanceKm(point, named) };
+
+  const ranked = all
     .map((region) => ({ region, distanceKm: distanceKm(point, region) }))
     .sort((a, b) => a.distanceKm - b.distanceKm);
   const nearest = ranked[0];

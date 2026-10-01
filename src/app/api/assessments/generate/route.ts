@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { serializeRiskAssessment } from "@/lib/api-serializers";
 import { dbLocales, normalizeLocale, supportedLocales } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
-import { scoreClimateRisk } from "@/lib/risk-scoring";
+import { scoreClimateRisk, scoreFromModel, type RiskScoringResult } from "@/lib/risk-scoring";
 import { readJson } from "@/server/http";
+import { loadRegionClimate, storeObservedMonths } from "@/server/ml/region-climate";
+import type { Locale } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
@@ -36,24 +38,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Region not found." }, { status: 404 });
     }
 
-    const latestClimate = region.climateSnapshots[0];
+    // With the ML service connected the assessment is its measured index for
+    // the latest observed month. Otherwise the heuristic scores the stored
+    // snapshot, and says so if a model was expected.
+    const { climate, notice } = await loadRegionClimate(region);
+    let scoreFor: (target: Locale) => RiskScoringResult;
 
-    if (!latestClimate) {
-      return NextResponse.json(
-        { error: "Region has no climate snapshot to assess." },
-        { status: 409 },
-      );
+    if (climate) {
+      await storeObservedMonths(prisma, region.id, climate.history);
+      scoreFor = (target) => scoreFromModel(climate.latest, climate.forecast, target);
+    } else {
+      const latestClimate = region.climateSnapshots[0];
+
+      if (!latestClimate) {
+        return NextResponse.json(
+          { error: notice ?? "Region has no climate snapshot to assess." },
+          { status: 409 },
+        );
+      }
+
+      const input = {
+        rainfallMm: latestClimate.rainfallMm,
+        temperatureC: latestClimate.temperatureC,
+        soilMoisture: latestClimate.soilMoisture,
+        vegetationIndex: latestClimate.vegetationIndex,
+        droughtIndex: latestClimate.droughtIndex,
+        floodExposure: latestClimate.floodExposure,
+      };
+      scoreFor = (target) => {
+        const heuristic = scoreClimateRisk(input, target);
+        return notice ? { ...heuristic, explanation: `${notice} ${heuristic.explanation}` } : heuristic;
+      };
     }
 
-    const input = {
-      rainfallMm: latestClimate.rainfallMm,
-      temperatureC: latestClimate.temperatureC,
-      soilMoisture: latestClimate.soilMoisture,
-      vegetationIndex: latestClimate.vegetationIndex,
-      droughtIndex: latestClimate.droughtIndex,
-      floodExposure: latestClimate.floodExposure,
-    };
-    const scoring = scoreClimateRisk(input, "en");
+    const scoring = scoreFor("en");
 
     const assessment = await prisma.riskAssessment.create({
       data: {
@@ -71,7 +89,7 @@ export async function POST(request: Request) {
         translations: {
           createMany: {
             data: supportedLocales.map((supportedLocale) => {
-              const localizedScoring = scoreClimateRisk(input, supportedLocale);
+              const localizedScoring = scoreFor(supportedLocale);
 
               return {
                 locale: dbLocales[supportedLocale],

@@ -5,7 +5,8 @@ import {
   RiskLevel as PrismaRiskLevel,
 } from "@prisma/client";
 import { dbLocales, supportedLocales } from "../src/lib/i18n";
-import { scoreClimateRisk, type ClimateScoringInput } from "../src/lib/risk-scoring";
+import { scoreClimateRisk, scoreFromModel, type ClimateScoringInput, type RiskScoringResult } from "../src/lib/risk-scoring";
+import { loadRegionClimate, snapshotFromModel } from "../src/server/ml/region-climate";
 import type { Locale } from "../src/lib/types";
 
 const prisma = new PrismaClient();
@@ -425,31 +426,33 @@ async function main() {
       },
     });
 
-    for (const [index, climate] of region.climate.entries()) {
-      const date = new Date(`${dates[index]}T09:00:00.000Z`);
-      const scoring = scoreClimateRisk(climate);
+    // With the ML service connected, the region's history is the real observed
+    // record and its measured index. Without it, the hand-written demo series
+    // below stands in, scored by the heuristic.
+    const { climate: model, notice } = await loadRegionClimate(region);
+    if (notice) console.warn(`${region.id}: ${notice}`);
 
-      await prisma.climateSnapshot.create({
-        data: {
-          regionId: region.id,
-          date,
-          rainfallMm: climate.rainfallMm,
-          temperatureC: climate.temperatureC,
-          soilMoisture: climate.soilMoisture,
-          vegetationIndex: climate.vegetationIndex,
-          droughtIndex: climate.droughtIndex,
-          floodExposure: climate.floodExposure,
-        },
-      });
+    const months: Array<{
+      snapshot: ClimateScoringInput & { date: Date };
+      scoreFor: (locale?: Locale) => RiskScoringResult;
+    }> = model
+      ? model.history.map((point, index) => ({
+          snapshot: snapshotFromModel(point),
+          // The forecast is made from the latest month, so only that month carries it.
+          scoreFor: (locale) => scoreFromModel(point, index === model.history.length - 1 ? model.forecast : null, locale),
+        }))
+      : region.climate.map((climate, index) => ({
+          snapshot: { date: new Date(`${dates[index]}T09:00:00.000Z`), ...climate },
+          scoreFor: (locale) => scoreClimateRisk(climate, locale),
+        }));
 
-      const assessmentInput = {
-        rainfallMm: climate.rainfallMm,
-        temperatureC: climate.temperatureC,
-        soilMoisture: climate.soilMoisture,
-        vegetationIndex: climate.vegetationIndex,
-        droughtIndex: climate.droughtIndex,
-        floodExposure: climate.floodExposure,
-      };
+    console.log(`${region.id}: ${months.length} months from ${model ? `ML service (${model.modelRegion.id})` : "demo series"}`);
+
+    for (const { snapshot, scoreFor } of months) {
+      const { date } = snapshot;
+      const scoring = scoreFor();
+
+      await prisma.climateSnapshot.create({ data: { regionId: region.id, ...snapshot } });
 
       await prisma.riskAssessment.create({
         data: {
@@ -467,7 +470,7 @@ async function main() {
           translations: {
             createMany: {
               data: supportedLocales.map((locale) => {
-                const localizedScoring = scoreClimateRisk(assessmentInput, locale);
+                const localizedScoring = scoreFor(locale);
 
                 return {
                   locale: dbLocales[locale],

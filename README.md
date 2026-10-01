@@ -5,10 +5,14 @@ them into crop sections and record a season. Banks and insurance agencies open
 those twins to see repayment timing, shared-resource concentration, crop-mix
 exposure and weather stress — and decide for themselves whether to lend.
 
-**No AI model is connected.** Every predictive output comes from a published,
-deterministic rule set behind a versioned interface that a trained model will
-later implement. The whole application runs, and the whole demo completes, with
-no AI service present.
+**The risk score is connected to the ClimaVex ML service** (the separate AI
+repository's `ml-service/`). For the region a farm sits in, the service supplies
+a climate-stress index *measured* from Sentinel-2 NDVI and ERA5 reanalysis, and
+an XGBoost *forecast* of next month's root-zone soil moisture; both enter the
+score as named, weighted factors beside the farm's own structure. If the service
+is not running, the published deterministic rule set answers instead and every
+affected score says so — the whole application still runs with no AI service
+present. See [AI model](#ai-model).
 
 ---
 
@@ -39,6 +43,19 @@ npm run dev
 
 Open <http://localhost:3000>.
 
+For model-backed risk scores, start the ML service from the AI repository in a
+second terminal (macOS needs `brew install libomp` once, for XGBoost):
+
+```bash
+cd <ai-repo>/ml-service
+python3 -m venv .venv && .venv/bin/pip install -r requirements-serve.txt
+.venv/bin/python -m uvicorn app.main:app --port 8001
+```
+
+The banner at the top of the map reads *AI model connected* once it answers.
+Without it the app falls back to the rule set; set `PROVIDER=deterministic` in
+`.env` to run that way on purpose.
+
 <details>
 <summary>If something goes wrong</summary>
 
@@ -67,7 +84,9 @@ password `climavex`:
 
 1. **Zoom to Konya demo farms**, then pick *Yıldız Tarım — Çumra*.
 2. **Risk** tab → *Calculate risk score*. Every factor shows its weight, value
-   and contribution — the score is readable, not a black box.
+   and contribution — the score is readable, not a black box. The *Climate
+   evidence* card shows what the ML service measured and forecast for the
+   farm's region.
 3. **Finance** tab → the 15 September instalment: ₺300,000 due, ₺180,000
    available, **₺120,000 short**. The insurance payout arrives in November and
    does *not* close that gap.
@@ -80,7 +99,7 @@ password `climavex`:
 ## Verification
 
 ```bash
-npm run verify    # typecheck + lint + no-shadow guard + 73 tests
+npm run verify    # typecheck + lint + no-shadow guard + 85 tests
 npm run e2e       # two scripted browser journeys (server must be running)
 ```
 
@@ -114,9 +133,38 @@ date*, so a payout dated later cannot retroactively close an earlier gap.
 geometry and crops; banks and insurers add loan terms, cash flows and insurance
 to twins they have been granted. Enforced in every route handler.
 
+## AI model
+
+`PROVIDER` in `.env` selects where the climate side of a risk score comes from.
+
+| | `trained-model` | `deterministic` |
+|---|---|---|
+| Farm risk score (twin, **Risk** tab) | Structural factors + measured climate index + XGBoost drought forecast | Structural factors only; weather term is zero |
+| Region assessment, loan review (`/bank`) | Measured index, its five sub-scores, CMIP6 projections | Heuristic over stored snapshots |
+| Scenario yield impact (**Scenario** tab) | Rule set | Rule set |
+| Needs the ML service | Yes — falls back to the rules, with a notice, if it is down | No |
+
+`src/server/ml/client.ts` is the only code that talks to the service: a 5 s
+timeout, one retry, and every response validated before it is trusted. A farm
+is matched to its nearest model region inside this app, so its coordinates are
+never sent anywhere.
+
+Three things are deliberately *not* the model's:
+
+- **Scenario yield impact stays rule-based.** The service measures and forecasts
+  regional climate; it does not model how a crop responds to a replayed season.
+- **The split of the weather weight** between the measurement (60%) and the
+  forecast (40%) is a stated assumption in `trained-risk-provider.ts`, not
+  something fitted — there are no observed losses to fit it against.
+- **Money.** A provider returns scores and percentages; the ledger does all
+  cash-flow arithmetic itself.
+
+`npm run seed:bank` loads the `/bank` dashboard's six regions — from the
+service's real observed record when it is running, from a demo series when not.
+
 ## Deliberately out of scope
 
-No AI model or substitute provider. No live cadastral (TKGM) integration — their
+No live cadastral (TKGM) integration — their
 terms forbid unpermitted programmatic access and commercial use of results, so
 parcels come from manual entry, drawing, import and demo fixtures. No production
 hardening: this is a learning project sized for a handful of test users.

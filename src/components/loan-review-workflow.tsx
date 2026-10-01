@@ -490,7 +490,10 @@ export function LoanReviewWorkflow({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {scenarios.map((item) => (
+                        {scenarios
+                          // Only the pathways this review actually has: the CMIP6 ensemble covers two of the three.
+                          .filter((item) => !review?.projections.length || review.projections.some((p) => p.scenario === item))
+                          .map((item) => (
                           <SelectItem key={item} value={item}>
                             {item}
                           </SelectItem>
@@ -543,11 +546,13 @@ export function LoanReviewWorkflow({
                     <p className="mt-3 text-sm leading-6 text-slate-700">
                       {selectedProjection.note}
                     </p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      {dictionary.workflow.confidenceRange}:{" "}
-                      {selectedProjection.confidenceLow.toFixed(1)}-
-                      {selectedProjection.confidenceHigh.toFixed(1)}
-                    </p>
+                    {selectedProjection.confidenceLow != null && selectedProjection.confidenceHigh != null ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {dictionary.workflow.confidenceRange}:{" "}
+                        {selectedProjection.confidenceLow.toFixed(1)}-
+                        {selectedProjection.confidenceHigh.toFixed(1)}
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="mt-5 rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">

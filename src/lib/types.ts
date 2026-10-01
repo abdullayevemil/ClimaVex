@@ -97,10 +97,11 @@ export type LongRangeProjection = {
   scenario: "SSP1-2.6" | "SSP2-4.5" | "SSP5-8.5";
   year: 2026 | 2030 | 2050;
   score5: number;
-  confidenceLow: number;
-  confidenceHigh: number;
+  /** Absent for model projections: a 4-model ensemble mean carries no interval. */
+  confidenceLow?: number;
+  confidenceHigh?: number;
   riskLevel: RiskLevel;
-  droughtFrequencyMultiplier: number;
+  droughtFrequencyMultiplier?: number;
   note: string;
 };
 

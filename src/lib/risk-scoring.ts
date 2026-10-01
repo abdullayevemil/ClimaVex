@@ -111,6 +111,71 @@ export function scoreClimateRisk(
   };
 }
 
+/** One observed month as the ML service reports it. */
+export type ModelObservation = {
+  asOf: string | null;
+  riskScore: number;
+  subScores: { drought: number; flood: number; heat: number; soil: number; vegetation: number };
+  rainfallMm: number;
+  temperatureC: number;
+  soilMoisturePct: number;
+  vegetationIndex: number;
+};
+
+export type ModelForecastNote = {
+  targetYear: number;
+  targetMonth: number;
+  predictedSoilAnomaly: number;
+} | null;
+
+/**
+ * The same result shape as `scoreClimateRisk`, filled from the ML service
+ * instead of the heuristic. Nothing is re-derived here: the score and the
+ * sub-scores are the service's own. The dashboard's fourth bar, "yield
+ * volatility", takes the service's vegetation stress — its NDVI-based yield
+ * proxy. Heat stress has no bar of its own and is reported in the explanation.
+ */
+export function scoreFromModel(
+  observation: ModelObservation,
+  forecast: ModelForecastNote,
+  locale: Locale = "en",
+): RiskScoringResult {
+  const riskScore = round(observation.riskScore);
+  const riskLevel = getRiskLevel(riskScore);
+  const s = observation.subScores;
+  const asOf = observation.asOf ?? "—";
+  const sigma = forecast
+    ? `${forecast.predictedSoilAnomaly >= 0 ? "+" : ""}${forecast.predictedSoilAnomaly.toFixed(2)}σ`
+    : null;
+  const target = forecast ? `${String(forecast.targetMonth).padStart(2, "0")}/${forecast.targetYear}` : null;
+  const readings = `${observation.rainfallMm.toFixed(0)} mm, ${observation.temperatureC.toFixed(1)} °C, ${observation.soilMoisturePct.toFixed(0)}%, NDVI ${observation.vegetationIndex.toFixed(2)}`;
+  const scores = `${s.drought.toFixed(0)} / ${s.flood.toFixed(0)} / ${s.heat.toFixed(0)} / ${s.soil.toFixed(0)} / ${s.vegetation.toFixed(0)}`;
+
+  const explanation = {
+    en: `ClimaVex ML service: measured climate-stress index ${riskScore}/100 for ${asOf}, from Sentinel-2 NDVI and ERA5 reanalysis scored against the region's own climatology. Drought / flood / heat / soil / vegetation sub-scores: ${scores}. Observed rainfall, temperature, soil moisture and vegetation: ${readings}.${
+      sigma ? ` XGBoost forecast for ${target}: root-zone soil moisture ${sigma} from the seasonal normal.` : ""
+    }`,
+    az: `ClimaVex ML xidməti: ${asOf} üçün ölçülmüş iqlim stressi indeksi ${riskScore}/100; Sentinel-2 NDVI və ERA5 reanaliz məlumatları regionun öz iqlim normasına görə qiymətləndirilib. Quraqlıq / daşqın / istilik / torpaq / bitki örtüyü alt balları: ${scores}. Müşahidə olunan yağıntı, temperatur, torpaq rütubəti və bitki örtüyü: ${readings}.${
+      sigma ? ` ${target} üçün XGBoost proqnozu: kök zonasında torpaq rütubəti mövsümi normadan ${sigma}.` : ""
+    }`,
+    tr: `ClimaVex ML servisi: ${asOf} için ölçülen iklim stresi endeksi ${riskScore}/100; Sentinel-2 NDVI ve ERA5 yeniden analiz verileri bölgenin kendi klimatolojisine göre puanlandı. Kuraklık / sel / sıcaklık / toprak / bitki örtüsü alt skorları: ${scores}. Gözlenen yağış, sıcaklık, toprak nemi ve bitki örtüsü: ${readings}.${
+      sigma ? ` ${target} için XGBoost tahmini: kök bölgesi toprak nemi mevsim normalinden ${sigma}.` : ""
+    }`,
+  }[locale];
+
+  return {
+    riskScore,
+    riskLevel,
+    droughtRisk: round(s.drought),
+    floodRisk: round(s.flood),
+    soilRisk: round(s.soil),
+    yieldVolatilityRisk: round(s.vegetation),
+    explanation,
+    financialInterpretation: buildFinancialInterpretation(riskLevel, riskScore, locale),
+    recommendation: buildRecommendation(riskLevel, locale),
+  };
+}
+
 function buildExplanation(
   input: ClimateScoringInput,
   riskLevel: RiskLevel,

@@ -1,10 +1,12 @@
 import { LoanApplicationStatus, RiskLevel as PrismaRiskLevel } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { buildLoanReviewResult } from "@/lib/loan-workflow";
+import { buildLoanReviewFromModel, buildLoanReviewResult } from "@/lib/loan-workflow";
 import { dbLocales, normalizeLocale, supportedLocales } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
-import { scoreClimateRisk, type ClimateScoringInput } from "@/lib/risk-scoring";
+import { scoreClimateRisk, scoreFromModel, type ClimateScoringInput } from "@/lib/risk-scoring";
 import { readJson } from "@/server/http";
+import { loadRegionClimate, storeObservedMonths } from "@/server/ml/region-climate";
+import type { Locale, LoanReviewResult } from "@/lib/types";
 
 export async function POST(
   request: Request,
@@ -39,33 +41,59 @@ export async function POST(
       );
     }
 
-    const latestClimate = application.region.climateSnapshots[0];
+    const cropType = body.cropType ?? application.cropType;
+    const startedAt = Date.now();
+    const { climate: model, notice } = await loadRegionClimate(application.region);
 
-    if (!latestClimate) {
-      return NextResponse.json(
-        { error: "No climate snapshot is available for this application." },
-        { status: 400 },
-      );
+    // One review per locale, from whichever source answered: the ML service
+    // when it is connected, the heuristic over the stored snapshot otherwise.
+    let reviewFor: (target: Locale) => LoanReviewResult;
+    let scoreFor: (target: Locale) => ReturnType<typeof scoreClimateRisk>;
+
+    if (model) {
+      await storeObservedMonths(prisma, application.regionId, model.history);
+      const latencyMs = Date.now() - startedAt;
+      reviewFor = (target) => buildLoanReviewFromModel(model, target, latencyMs);
+      scoreFor = (target) => scoreFromModel(model.latest, model.forecast, target);
+    } else {
+      const latestClimate = application.region.climateSnapshots[0];
+
+      if (!latestClimate) {
+        return NextResponse.json(
+          { error: notice ?? "No climate snapshot is available for this application." },
+          { status: 400 },
+        );
+      }
+
+      const climate: ClimateScoringInput = {
+        rainfallMm: latestClimate.rainfallMm,
+        temperatureC: latestClimate.temperatureC,
+        soilMoisture: latestClimate.soilMoisture,
+        vegetationIndex: latestClimate.vegetationIndex,
+        droughtIndex: latestClimate.droughtIndex,
+        floodExposure: latestClimate.floodExposure,
+      };
+      reviewFor = (target) => {
+        const heuristic = buildLoanReviewResult({
+          cropType,
+          regionName: application.region.name,
+          requestedAmount: application.requestedAmount,
+          tenorYears: application.tenorYears,
+          climate,
+          locale: target,
+        });
+        return notice ? { ...heuristic, modelMode: `${notice} ${heuristic.modelMode}` } : heuristic;
+      };
+      scoreFor = (target) => scoreClimateRisk(climate, target);
     }
 
-    const climate: ClimateScoringInput = {
-      rainfallMm: latestClimate.rainfallMm,
-      temperatureC: latestClimate.temperatureC,
-      soilMoisture: latestClimate.soilMoisture,
-      vegetationIndex: latestClimate.vegetationIndex,
-      droughtIndex: latestClimate.droughtIndex,
-      floodExposure: latestClimate.floodExposure,
-    };
-    const cropType = body.cropType ?? application.cropType;
-    const review = buildLoanReviewResult({
-      cropType,
-      regionName: application.region.name,
-      requestedAmount: application.requestedAmount,
-      tenorYears: application.tenorYears,
-      climate,
-      locale,
-    });
-    const baseScoring = scoreClimateRisk(climate, locale);
+    const review = reviewFor(locale);
+    const baseScoring = scoreFor(locale);
+    // A measured score explains itself; the heuristic leads with its top factor.
+    const explain = (target: Locale) =>
+      model
+        ? scoreFor(target).explanation
+        : `${reviewFor(target).modelMode}. ${reviewFor(target).factorContributions[0]?.explanation ?? scoreFor(target).explanation}`;
 
     await prisma.$transaction([
       prisma.riskAssessment.create({
@@ -78,28 +106,17 @@ export async function POST(
           floodRisk: baseScoring.floodRisk,
           soilRisk: baseScoring.soilRisk,
           yieldVolatilityRisk: baseScoring.yieldVolatilityRisk,
-          explanation: `${review.modelMode}. ${review.factorContributions[0]?.explanation ?? baseScoring.explanation}`,
+          explanation: explain(locale),
           financialInterpretation: review.creditRecommendation.summary,
           recommendation: review.creditRecommendation.summary,
           translations: {
             createMany: {
               data: supportedLocales.map((supportedLocale) => {
-                const localizedBase = scoreClimateRisk(climate, supportedLocale);
-                const localizedReview = buildLoanReviewResult({
-                  cropType,
-                  regionName: application.region.name,
-                  requestedAmount: application.requestedAmount,
-                  tenorYears: application.tenorYears,
-                  climate,
-                  locale: supportedLocale,
-                });
+                const localizedReview = reviewFor(supportedLocale);
 
                 return {
                   locale: dbLocales[supportedLocale],
-                  explanation: `${localizedReview.modelMode}. ${
-                    localizedReview.factorContributions[0]?.explanation ??
-                    localizedBase.explanation
-                  }`,
+                  explanation: explain(supportedLocale),
                   financialInterpretation:
                     localizedReview.creditRecommendation.summary,
                   recommendation: localizedReview.creditRecommendation.summary,

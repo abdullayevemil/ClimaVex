@@ -3,6 +3,7 @@ import { serializeClimateReport } from "@/lib/api-serializers";
 import { normalizeLocale } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { readJson } from "@/server/http";
+import { resolveProviderMode } from "@/domain/scenario/providers";
 
 export async function POST(request: Request) {
   try {
@@ -54,11 +55,22 @@ export async function POST(request: Request) {
           ? `${application.applicantName} üçün iqlim kredit riski hesabatı yaradıldı. Buraya risk balı, iqlim göstəriciləri, izah edilə bilən töhfələr, 2030/2050 SSP proqnozları və kredit şərti tövsiyələri daxildir.`
           : `Climate credit risk report generated for ${application.applicantName}. It includes the risk score, climate indicators, explainability contributions, 2030/2050 SSP projections, and credit condition recommendations.`;
 
+    const fromModel = resolveProviderMode(process.env.PROVIDER) === "trained-model";
     const dataSourcesAppendix = [
-      "Sentinel-2 NDVI proxy, last 30 days",
-      "MGM precipitation anomaly proxy, last 12 months",
-      "Soil moisture and degradation proxy",
-      "MVP climate risk scoring model; XGBoost-ready feature pipeline",
+      ...(fromModel
+        ? [
+            "ClimaVex ML service: measured climate-stress index",
+            "Sentinel-2 NDVI, monthly",
+            "ERA5 reanalysis: rainfall, temperature, soil moisture, monthly",
+            "XGBoost one-month root-zone soil-moisture forecast",
+            "CMIP6 ensemble projections, SSP2-4.5 and SSP5-8.5, 2030 and 2050",
+          ]
+        : [
+            "Sentinel-2 NDVI proxy, last 30 days",
+            "MGM precipitation anomaly proxy, last 12 months",
+            "Soil moisture and degradation proxy",
+            "MVP climate risk scoring model; XGBoost-ready feature pipeline",
+          ]),
       `Latest risk score: ${latestRisk?.riskScore.toFixed(1) ?? "unavailable"}`,
     ].join("\n");
 
