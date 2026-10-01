@@ -92,6 +92,11 @@ export type AssessmentDto = {
   note: string;
 };
 
+export type ExpectedLossDto = {
+  loanAmount: string; riskScore: number; lossGivenDefault: string;
+  threshold: number; applies: boolean; expectedLoss: string | null;
+};
+
 export type CropMixDto = {
   exposedShare: number; exposedRevenue: string; totalRevenue: string;
   affectedSections: Array<{ sectionId: string; label: string; cropName: string; expectedRevenue: string; shareOfTotal: number }>;

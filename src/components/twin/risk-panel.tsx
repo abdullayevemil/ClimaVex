@@ -1,13 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Gauge, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AiStatusBanner, DecisionNote, DemoBanner, ModelBanner } from "./demo-banner";
 import { Stat } from "./stat";
 import { formatPct, formatTRY } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AssessmentDto } from "@/lib/twin-types";
+import type { AssessmentDto, ExpectedLossDto } from "@/lib/twin-types";
+import { EXPECTED_LOSS_THRESHOLD } from "@/domain/finance/expected-loss";
+import { fetchJson } from "@/lib/fetch-json";
 import type { ClimateEvidence } from "@/domain/scenario/contract";
 
 const BAND_STYLE = {
@@ -64,6 +68,10 @@ export function RiskPanel({
         </div>
       </div>
 
+      {a.score > EXPECTED_LOSS_THRESHOLD ? (
+        <ExpectedLossCard key={assessment.runId} farmId={a.farmId} runId={assessment.runId} />
+      ) : null}
+
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contributing factors</p>
         <div className="space-y-1.5">
@@ -112,6 +120,75 @@ export function RiskPanel({
 
       {fromModel ? <ModelBanner message={a.disclaimer} /> : <DemoBanner compact message={a.disclaimer} />}
       <DecisionNote />
+    </div>
+  );
+}
+
+/**
+ * Expected loss on a prospective loan. Rendered only for a risk score above
+ * the threshold, and the arithmetic is the server's: this card sends an amount
+ * and shows what comes back.
+ */
+function ExpectedLossCard({ farmId, runId }: { farmId: string; runId: string }) {
+  const [amount, setAmount] = useState("200000");
+  const [result, setResult] = useState<ExpectedLossDto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const calculate = async (loanAmount: string) => {
+    try {
+      setError(null);
+      setResult(
+        await fetchJson<ExpectedLossDto>(`/api/farms/${farmId}/expected-loss`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ runId, loanAmount }),
+        }),
+      );
+    } catch (e) {
+      setResult(null);
+      setError(e instanceof Error ? e.message : "Could not calculate the expected loss.");
+    }
+  };
+
+  // The starting amount is calculated once, when the card appears for a new score.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void calculate("200000"); }, []);
+
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Expected loss</p>
+      <div className="space-y-2.5 rounded-md border border-red-200 bg-red-50/40 px-3 py-2.5">
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(e) => { e.preventDefault(); void calculate(amount); }}
+        >
+          <label className="flex-1 text-[11px] font-medium text-slate-700">
+            Expected loan (₺)
+            <Input
+              type="number" min="1" step="1000" inputMode="decimal" value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="cvx-num mt-1 h-8 bg-white text-xs"
+            />
+          </label>
+          <Button type="submit" size="sm" variant="outline" className="h-8 text-xs">Calculate</Button>
+        </form>
+
+        {result?.applies && result.expectedLoss ? (
+          <div>
+            <p className="cvx-num text-2xl font-semibold leading-none text-red-700">{formatTRY(result.expectedLoss)}</p>
+            <p className="cvx-num mt-1.5 text-[10px] text-slate-500">
+              {formatTRY(result.loanAmount)} × risk score {result.riskScore.toFixed(1)}% ×{" "}
+              {(Number(result.lossGivenDefault) * 100).toFixed(0)}% loss given default
+            </p>
+          </div>
+        ) : null}
+        {error ? <p className="text-[11px] text-red-700">{error}</p> : null}
+
+        <p className="text-[11px] leading-snug text-slate-600">
+          Shown because the risk score is above {EXPECTED_LOSS_THRESHOLD}. The score stands in for the
+          probability of loss — an estimate, not a calibrated default rate.
+        </p>
+      </div>
     </div>
   );
 }

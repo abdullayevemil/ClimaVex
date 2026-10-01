@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runLedger, ledgerBalances, type LedgerEvent } from "@/domain/finance/ledger";
 import { money, moneyToString } from "@/domain/finance/money";
+import { expectedLoss } from "@/domain/finance/expected-loss";
 import { assessPayout, type PolicyTerms } from "@/domain/finance/insurance";
 import { addDays, diffDays, toIsoDate, isWithin } from "@/domain/finance/dates";
 import { cropMixExposure, sectionRevenue } from "@/domain/vulnerability/crop-mix";
@@ -21,6 +22,21 @@ describe("dates", () => {
     expect(addDays("2026-02-27", 2)).toBe("2026-03-01");
     expect(diffDays("2026-11-20", "2026-09-15")).toBe(66);
     expect(isWithin("2026-07-10", "2026-07-05", "2026-07-25")).toBe(true);
+  });
+});
+
+describe("expected loss", () => {
+  it("is loan × risk score × loss given default", () => {
+    const result = expectedLoss(money("200000"), 60);
+    expect(result.applies).toBe(true);
+    expect(result.expectedLoss).toBe("54000.00"); // 200,000 × 0.60 × 0.45
+    expect(expectedLoss(money("200000"), 60.1).expectedLoss).toBe("54090.00");
+  });
+
+  it("is reported only above a risk score of 50", () => {
+    expect(expectedLoss(money("200000"), 50)).toMatchObject({ applies: false, expectedLoss: null });
+    expect(expectedLoss(money("200000"), 45).expectedLoss).toBeNull();
+    expect(expectedLoss(money("200000"), 50.1).expectedLoss).toBe("45090.00");
   });
 });
 

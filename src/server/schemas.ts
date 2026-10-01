@@ -162,6 +162,11 @@ export const createPolicySchema = z.object({
   payoutLagDays: z.number().int().min(0).max(365).optional(),
 });
 
+export const expectedLossSchema = z.object({
+  runId: z.string().min(1),
+  loanAmount: moneyString.refine((v) => Number(v) > 0 && Number(v) <= 1e12, "Enter a loan amount above zero."),
+});
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),

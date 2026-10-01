@@ -89,7 +89,9 @@ password `climavex`:
 2. **Risk** tab → *Calculate risk score*. Every factor shows its weight, value
    and contribution — the score is readable, not a black box. The *Climate
    evidence* card shows what the ML service measured and forecast for the
-   farm's region.
+   farm's region. When the score is above 50, an *Expected loss* card appears:
+   enter a prospective loan and the server returns loan × risk score × 45% loss
+   given default.
 3. **Finance** tab → the 15 September instalment: ₺300,000 due, ₺180,000
    available, **₺120,000 short**. The insurance payout arrives in November and
    does *not* close that gap.
