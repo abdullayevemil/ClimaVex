@@ -61,7 +61,7 @@ export function LoanReviewWorkflow({
   const { dictionary, locale } = useI18n();
   const [selectedLoanId, setSelectedLoanId] = useState("");
   const [cropType, setCropType] = useState(crops[0]);
-  const [coordinates, setCoordinates] = useState("37.1811, 33.2150");
+  const [coordinates, setCoordinates] = useState("37.2978, 33.2165");
   const [review, setReview] = useState<LoanReviewResult | null>(null);
   const [yearIndex, setYearIndex] = useState(0);
   const [scenario, setScenario] =

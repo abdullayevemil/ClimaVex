@@ -1,6 +1,6 @@
 /**
- * Geographic configuration. Anatolia is the operating extent; Konya is the
- * demo focus. Both are configurable — nothing downstream hardcodes a bound.
+ * Geographic configuration. Anatolia is the operating extent; the Harran Plain
+ * is the demo focus. Both are configurable — nothing downstream hardcodes a bound.
  */
 export const MAP_CONFIG = {
   /** Asian Türkiye. [south, west, north, east] in degrees. */
@@ -9,7 +9,7 @@ export const MAP_CONFIG = {
   defaultZoom: 7,
   minZoom: 6,
   maxZoom: 18,
-  demoFocus: { name: "Konya", center: [37.87, 32.49] as [number, number], zoom: 12 },
+  demoFocus: { name: "Harran", center: [36.892, 38.957] as [number, number], zoom: 13 },
 } as const;
 
 /**

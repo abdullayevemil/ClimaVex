@@ -5,9 +5,16 @@
  * sections are produced by calling the real subdivision algorithm rather than
  * being hand-typed, so the seed doubles as a reproducibility check on it.
  *
- * The four Konya farms deliberately cover the geometry edge cases (convex,
- * concave, holed, disconnected) and the financial fixtures reproduce the exact
+ * The four farms deliberately cover the geometry edge cases (convex, concave,
+ * holed, weighted split) and the financial fixtures reproduce the exact
  * figures used in the ClimaVex concept documents.
+ *
+ * Every outline sits on real cropland, placed against satellite imagery: two
+ * on the Harran Plain south of Şanlıurfa, one on the Çumra plain in Konya and
+ * one on the Kumkale plain in Çanakkale. The outlines are demo fixtures — real
+ * fields, but not anyone's surveyed parcel boundaries. Spreading them across
+ * three provinces also puts them in three different model regions, so their
+ * climate factors genuinely differ.
  */
 import { PrismaClient, Prisma, type UserRole } from "@prisma/client";
 import { subdivide } from "../src/domain/geometry/subdivide";
@@ -17,12 +24,14 @@ import type { ArealGeometry } from "../src/domain/geometry/types";
 
 const db = new PrismaClient();
 const D = (v: string | number) => new Prisma.Decimal(v);
-const REGION = "TR-42"; // Konya
+// ponytail: one crop calendar and one assumption set for every province,
+// filed under Konya's code. Per-region calendars when a second one is sourced.
+const REGION = "TR-42";
 
 /* ── Crops ────────────────────────────────────────────────────────────────
- * PROVISIONAL demo catalogue. Konya crop statistics could not be verified —
+ * PROVISIONAL demo catalogue. Regional crop statistics could not be verified —
  * the official sources were unreachable — so no ranking claim is made. The
- * catalogue is data, not code: changing the five is a seed edit.
+ * catalogue is data, not code: changing it is a seed edit.
  * ─────────────────────────────────────────────────────────────────────── */
 const CROPS = [
   { code: "WHEAT",      nameEn: "Wheat",      nameTr: "Buğday",        colorHex: "#b45309", isIrrigated: false, sortOrder: 1,
@@ -45,6 +54,11 @@ const CROPS = [
     heatThresholdC: 34, heatPctPerDay: 1.2, heatCapPct: 30, frostThresholdC: -1, frostPctPerEvent: 7,
     waterRequirementMm: 480, droughtMaxPct: 40, waterloggingPct: 11, irrigationPctPerDay: 1.5, irrigationCapPct: 38,
     yieldTPerHa: "3.10", priceTryPerT: "17500.00", costTryPerHa: "21000.00" },
+  // Seed cotton: the Harran Plain's main irrigated crop.
+  { code: "COTTON",     nameEn: "Cotton",     nameTr: "Pamuk",         colorHex: "#7c3aed", isIrrigated: true,  sortOrder: 6,
+    heatThresholdC: 38, heatPctPerDay: 0.8, heatCapPct: 24, frostThresholdC: 2, frostPctPerEvent: 10,
+    waterRequirementMm: 800, droughtMaxPct: 48, waterloggingPct: 10, irrigationPctPerDay: 2.0, irrigationCapPct: 50,
+    yieldTPerHa: "5.00", priceTryPerT: "28000.00", costTryPerHa: "78000.00" },
 ] as const;
 
 /** Stage offsets in days from planting. `isSensitive` marks yield-critical windows. */
@@ -54,15 +68,18 @@ const STAGES: Record<string, Array<[string, number, number, boolean]>> = {
   MAIZE: [["SOWING",0,10,false],["EMERGENCE",11,30,false],["VEGETATIVE",31,70,false],["FLOWERING",71,95,true],["GRAIN_FILL",96,130,true],["MATURITY",131,150,false],["HARVEST",151,170,false]],
   SUGAR_BEET: [["SOWING",0,12,false],["EMERGENCE",13,40,false],["VEGETATIVE",41,120,true],["GRAIN_FILL",121,180,true],["MATURITY",181,200,false],["HARVEST",201,225,false]],
   SUNFLOWER: [["SOWING",0,12,false],["EMERGENCE",13,32,false],["VEGETATIVE",33,65,false],["FLOWERING",66,92,true],["GRAIN_FILL",93,120,true],["MATURITY",121,140,false],["HARVEST",141,160,false]],
+  // GRAIN_FILL stands in for boll development: the stage enum is cereal-shaped.
+  COTTON: [["SOWING",0,12,false],["EMERGENCE",13,35,false],["VEGETATIVE",36,65,false],["FLOWERING",66,105,true],["GRAIN_FILL",106,145,true],["MATURITY",146,160,false],["HARVEST",161,185,false]],
 };
 
-/** Planting dates and sale lags for the 2025-26 Konya season. */
+/** Planting dates and sale lags for the 2025-26 season. */
 const CALENDAR: Record<string, { planting: string; harvest: [string, string]; saleLagDays: number }> = {
   WHEAT:      { planting: "2025-10-12", harvest: ["2026-07-05","2026-07-25"], saleLagDays: 30 },
   BARLEY:     { planting: "2025-10-05", harvest: ["2026-06-20","2026-07-08"], saleLagDays: 28 },
   MAIZE:      { planting: "2026-04-18", harvest: ["2026-09-20","2026-10-10"], saleLagDays: 45 },
   SUGAR_BEET: { planting: "2026-03-28", harvest: ["2026-10-12","2026-11-05"], saleLagDays: 60 },
   SUNFLOWER:  { planting: "2026-04-25", harvest: ["2026-09-12","2026-09-28"], saleLagDays: 40 },
+  COTTON:     { planting: "2026-04-28", harvest: ["2026-10-06","2026-10-30"], saleLagDays: 30 },
 };
 
 const SEASON = { name: "2025-26", start: "2025-10-01", end: "2026-09-30" };
@@ -73,45 +90,49 @@ type FarmSpec = {
   parcels: Array<{ il: string; ilce: string; mahalleKoy: string; ada: number; parsel: number; input: string; officialAreaM2?: string }>;
 };
 
-/* Four Konya farms, each chosen to exercise a different geometry case. */
+/* Four farms, each chosen to exercise a different geometry case. */
 const FARMS: FarmSpec[] = [
   {
-    id: "farm-cumra-yildiz", name: "Yıldız Tarım — Çumra", note: "Convex block, five crops",
+    // Harran Plain: irrigated cotton, maize and winter cereals.
+    id: "farm-harran-yildiz", name: "Yıldız Tarım — Harran", note: "Convex block, four crops",
     borrower: "borrower-yildiz",
-    geometry: { type: "Polygon", coordinates: [[[32.470,37.860],[32.492,37.860],[32.492,37.874],[32.470,37.874],[32.470,37.860]]] },
-    n: 6, crops: ["WHEAT","WHEAT","BARLEY","SUGAR_BEET","MAIZE","SUNFLOWER"],
+    geometry: { type: "Polygon", coordinates: [[[38.9425,36.8930],[38.9645,36.8930],[38.9645,36.9070],[38.9425,36.9070],[38.9425,36.8930]]] },
+    n: 6, crops: ["COTTON","COTTON","WHEAT","MAIZE","BARLEY","WHEAT"],
     parcels: [
-      { il:"Konya", ilce:"Çumra", mahalleKoy:"Alibeyhüyüğü", ada:463, parsel:21, input:"463:21", officialAreaM2:"1955000.00" },
-      { il:"Konya", ilce:"Çumra", mahalleKoy:"Alibeyhüyüğü", ada:463, parsel:22, input:"463/22" },
+      { il:"Şanlıurfa", ilce:"Harran", mahalleKoy:"Yardımcı", ada:463, parsel:21, input:"463:21", officialAreaM2:"1955000.00" },
+      { il:"Şanlıurfa", ilce:"Harran", mahalleKoy:"Yardımcı", ada:463, parsel:22, input:"463/22" },
     ],
   },
   {
-    id: "farm-karatay-demir", name: "Demir Çiftliği — Karatay", note: "Concave L-shape",
+    // The neighbouring block to the south-east, on the same canal.
+    id: "farm-harran-demir", name: "Demir Çiftliği — Harran", note: "Concave L-shape",
     borrower: "borrower-demir",
-    geometry: { type: "Polygon", coordinates: [[[32.560,37.900],[32.584,37.900],[32.584,37.910],[32.572,37.910],[32.572,37.922],[32.560,37.922],[32.560,37.900]]] },
-    n: 4, crops: ["WHEAT","BARLEY","SUGAR_BEET","WHEAT"],
-    parcels: [{ il:"Konya", ilce:"Karatay", mahalleKoy:"Akören", ada:463, parsel:21, input:"463 ada, 21 parsel" }],
+    geometry: { type: "Polygon", coordinates: [[[38.9530,36.8744],[38.9722,36.8744],[38.9722,36.8824],[38.9626,36.8824],[38.9626,36.8920],[38.9530,36.8920],[38.9530,36.8744]]] },
+    n: 4, crops: ["COTTON","WHEAT","MAIZE","COTTON"],
+    parcels: [{ il:"Şanlıurfa", ilce:"Harran", mahalleKoy:"Bozyazı", ada:463, parsel:21, input:"463 ada, 21 parsel" }],
   },
   {
-    id: "farm-meram-ova", name: "Ova Tarım — Meram", note: "Polygon with an unusable hole",
+    // Çumra plain, Konya. The hole is the pond and well site in the middle of the block.
+    id: "farm-cumra-ova", name: "Ova Tarım — Çumra", note: "Polygon with an unusable hole",
     borrower: "borrower-ova",
     geometry: { type: "Polygon", coordinates: [
-      [[32.400,37.820],[32.424,37.820],[32.424,37.836],[32.400,37.836],[32.400,37.820]],
-      [[32.409,37.826],[32.415,37.826],[32.415,37.830],[32.409,37.830],[32.409,37.826]]] },
+      [[32.7854,37.6308],[32.8094,37.6308],[32.8094,37.6468],[32.7854,37.6468],[32.7854,37.6308]],
+      [[32.7944,37.6368],[32.8004,37.6368],[32.8004,37.6408],[32.7944,37.6408],[32.7944,37.6368]]] },
     n: 4, crops: ["SUGAR_BEET","MAIZE","WHEAT","BARLEY"],
-    parcels: [{ il:"Konya", ilce:"Meram", mahalleKoy:"Hatunsaray", ada:512, parsel:7, input:"512:7" }],
+    parcels: [{ il:"Konya", ilce:"Çumra", mahalleKoy:"Alibeyhüyüğü", ada:512, parsel:7, input:"512:7" }],
   },
   {
-    id: "farm-altinekin-genis", name: "Geniş Ova — Altınekin", note: "20 ha split 12 wheat / 8 maize",
+    // Kumkale plain, Çanakkale: a 500 m x 400 m block beside the Karamenderes.
+    id: "farm-kumkale-genis", name: "Geniş Ova — Kumkale", note: "20 ha split 12 wheat / 8 maize",
     borrower: "borrower-genis",
-    geometry: { type: "Polygon", coordinates: [[[32.740,38.300],[32.7568,38.300],[32.7568,38.3107],[32.740,38.3107],[32.740,38.300]]] },
+    geometry: { type: "Polygon", coordinates: [[[26.2200,39.9564],[26.2259,39.9564],[26.2259,39.9600],[26.2200,39.9600],[26.2200,39.9564]]] },
     n: 2, weights: [0.6, 0.4], crops: ["WHEAT","MAIZE"],
-    parcels: [{ il:"Konya", ilce:"Altınekin", mahalleKoy:"Koçaş", ada:118, parsel:4, input:"118:4" }],
+    parcels: [{ il:"Çanakkale", ilce:"Merkez", mahalleKoy:"Kumkale", ada:118, parsel:4, input:"118:4" }],
   },
 ];
 
 const BORROWERS = [
-  { id: "borrower-yildiz", name: "Yıldız Tarım Ltd.", institutionName: "Konya Ziraat Odası" },
+  { id: "borrower-yildiz", name: "Yıldız Tarım Ltd.", institutionName: "Şanlıurfa Ziraat Odası" },
   { id: "borrower-demir",  name: "Mustafa Demir",     institutionName: null },
   { id: "borrower-ova",    name: "Ova Tarım A.Ş.",    institutionName: null },
   { id: "borrower-genis",  name: "Geniş Ova Koop.",   institutionName: null },
@@ -183,14 +204,14 @@ async function main() {
   }
 
   // Wheat is preselected: the best-supported single claim in the evidence found.
-  for (const [rank, code] of ["WHEAT","BARLEY","SUGAR_BEET","MAIZE","SUNFLOWER"].entries()) {
+  for (const [rank, code] of ["WHEAT","BARLEY","SUGAR_BEET","MAIZE","SUNFLOWER","COTTON"].entries()) {
     await db.regionalCropDefault.create({ data: { regionCode: REGION, cropId: cropIds.get(code)!, rank: rank + 1 } });
   }
 
   /* Farms, parcels, seasons and sections. */
   const ownerFor: Record<string, string> = {
-    "farm-cumra-yildiz": "user-farmer", "farm-karatay-demir": "user-farmer-2",
-    "farm-meram-ova": "user-farmer", "farm-altinekin-genis": "user-farmer",
+    "farm-harran-yildiz": "user-farmer", "farm-harran-demir": "user-farmer-2",
+    "farm-cumra-ova": "user-farmer", "farm-kumkale-genis": "user-farmer",
   };
   const seasonIds = new Map<string, string>();
   const sectionIds = new Map<string, string[]>();
@@ -199,7 +220,7 @@ async function main() {
     const farm = await db.farm.create({
       data: {
         id: spec.id, ownerUserId: ownerFor[spec.id], borrowerId: spec.borrower,
-        name: spec.name, description: spec.note, il: "Konya", ilce: spec.parcels[0].ilce,
+        name: spec.name, description: spec.note, il: spec.parcels[0].il, ilce: spec.parcels[0].ilce,
         geojson: spec.geometry as unknown as Prisma.InputJsonValue,
         geometrySource: "DEMO_FIXTURE", verificationStatus: "UNVERIFIED_DRAFT", isDemo: true,
       },
@@ -265,57 +286,58 @@ async function main() {
 async function seedResources(sectionIds: Map<string, string[]>) {
   const canalA = await db.resource.create({
     data: {
-      id: "resource-canal-cumra", ownerUserId: "user-farmer", name: "Çumra Main Canal Connection",
+      id: "resource-canal-harran", ownerUserId: "user-farmer", name: "Harran Main Canal Connection",
       type: "CANAL_CONNECTION", isDemo: true, capacityLpm: 4200,
-      geojson: { type: "LineString", coordinates: [[32.466,37.858],[32.496,37.866],[32.566,37.906]] } as unknown as Prisma.InputJsonValue,
+      // Runs along the gap between the two Harran farms, then down the L's inner edge.
+      geojson: { type: "LineString", coordinates: [[38.9400,36.8925],[38.9650,36.8925],[38.9740,36.8830]] } as unknown as Prisma.InputJsonValue,
     },
   });
 
   const canalB = await db.resource.create({
     data: {
-      id: "resource-canal-altinekin", ownerUserId: "user-farmer", name: "Altınekin Feeder Canal",
+      id: "resource-canal-kumkale", ownerUserId: "user-farmer", name: "Kumkale Feeder Canal",
       type: "CANAL_CONNECTION", isDemo: true, capacityLpm: 2600,
-      geojson: { type: "LineString", coordinates: [[32.736,38.298],[32.760,38.312]] } as unknown as Prisma.InputJsonValue,
+      geojson: { type: "LineString", coordinates: [[26.2188,39.9556],[26.2270,39.9606]] } as unknown as Prisma.InputJsonValue,
     },
   });
 
   await db.resource.create({
     data: {
-      id: "resource-well-meram", ownerUserId: "user-farmer", name: "Meram Deep Well 1",
+      id: "resource-well-cumra", ownerUserId: "user-farmer", name: "Çumra Deep Well 1",
       type: "WELL", isDemo: true, capacityLpm: 900,
-      geojson: { type: "Point", coordinates: [32.412, 37.828] } as unknown as Prisma.InputJsonValue,
+      geojson: { type: "Point", coordinates: [32.7974, 37.6388] } as unknown as Prisma.InputJsonValue,
     },
   });
 
   // Canal A: three fields spanning two borrowers.
   const a = [
-    ...(sectionIds.get("farm-cumra-yildiz") ?? []).slice(0, 2),
-    ...(sectionIds.get("farm-karatay-demir") ?? []).slice(0, 1),
+    ...(sectionIds.get("farm-harran-yildiz") ?? []).slice(0, 2),
+    ...(sectionIds.get("farm-harran-demir") ?? []).slice(0, 1),
   ];
   for (const sectionId of a) {
     await db.resourceLink.create({ data: { resourceId: canalA.id, sectionId, sharePct: 100 } });
   }
 
-  // Canal B plus the Meram well widen the portfolio case.
-  for (const sectionId of (sectionIds.get("farm-altinekin-genis") ?? [])) {
+  // Canal B plus the Çumra well widen the portfolio case.
+  for (const sectionId of (sectionIds.get("farm-kumkale-genis") ?? [])) {
     await db.resourceLink.create({ data: { resourceId: canalB.id, sectionId, sharePct: 100 } });
   }
-  for (const sectionId of (sectionIds.get("farm-meram-ova") ?? []).slice(0, 2)) {
-    await db.resourceLink.create({ data: { resourceId: "resource-well-meram", sectionId, sharePct: 100 } });
+  for (const sectionId of (sectionIds.get("farm-cumra-ova") ?? []).slice(0, 2)) {
+    await db.resourceLink.create({ data: { resourceId: "resource-well-cumra", sectionId, sharePct: 100 } });
   }
 }
 
 /* ── Finance ───────────────────────────────────────────────────────────────
- * The Çumra farm reproduces the concept document's arithmetic exactly:
+ * The Yıldız farm reproduces the concept document's arithmetic exactly:
  * TL300,000 due, TL180,000 available, a TL120,000 gap on the due date, and an
  * assumed eligible TL120,000 payout that arrives afterwards.
  * ─────────────────────────────────────────────────────────────────────── */
 async function seedFinance(seasonIds: Map<string, string>) {
-  const cumraSeason = seasonIds.get("farm-cumra-yildiz")!;
+  const yildizSeason = seasonIds.get("farm-harran-yildiz")!;
 
   const loan = await db.loan.create({
     data: {
-      id: "loan-yildiz-2026", borrowerId: "borrower-yildiz", farmId: "farm-cumra-yildiz",
+      id: "loan-yildiz-2026", borrowerId: "borrower-yildiz", farmId: "farm-harran-yildiz",
       reference: "ZRT-2026-0413", principal: D("1200000.00"), outstandingPrincipal: D("900000.00"),
       interestRatePct: D("31.5000"), startDate: isoDateToUtcDate("2025-10-15"), endDate: isoDateToUtcDate("2028-09-15"),
       createdByUserId: "user-bank", createdByRole: "BANK_USER",
@@ -336,7 +358,7 @@ async function seedFinance(seasonIds: Map<string, string>) {
   for (const [kind, date, amount, label] of events) {
     await db.cashFlowEvent.create({
       data: {
-        seasonId: cumraSeason, farmId: "farm-cumra-yildiz", kind: kind as never,
+        seasonId: yildizSeason, farmId: "farm-harran-yildiz", kind: kind as never,
         date: isoDateToUtcDate(date), amount: D(amount), label, source: "FIXTURE",
       },
     });
@@ -344,7 +366,7 @@ async function seedFinance(seasonIds: Map<string, string>) {
 
   await db.insurancePolicy.create({
     data: {
-      farmId: "farm-cumra-yildiz", provider: "Demo Agri Insurance",
+      farmId: "farm-harran-yildiz", provider: "Demo Agri Insurance",
       eligibleHazards: ["DROUGHT", "HAIL", "FROST"],
       coverageLimit: D("400000.00"), deductible: D("20000.00"),
       assumedEligibility: true, payoutLagDays: 45, isDemoAssumption: true,
@@ -353,11 +375,11 @@ async function seedFinance(seasonIds: Map<string, string>) {
     },
   });
 
-  // Karatay: the September-due / November-proceeds timing gap.
-  const demirSeason = seasonIds.get("farm-karatay-demir")!;
+  // Demir: the September-due / November-proceeds timing gap.
+  const demirSeason = seasonIds.get("farm-harran-demir")!;
   await db.loan.create({
     data: {
-      borrowerId: "borrower-demir", farmId: "farm-karatay-demir", reference: "ZRT-2026-0771",
+      borrowerId: "borrower-demir", farmId: "farm-harran-demir", reference: "ZRT-2026-0771",
       principal: D("650000.00"), outstandingPrincipal: D("520000.00"), interestRatePct: D("29.0000"),
       startDate: isoDateToUtcDate("2025-11-01"), endDate: isoDateToUtcDate("2028-11-01"),
       createdByUserId: "user-bank", createdByRole: "BANK_USER",
@@ -365,13 +387,13 @@ async function seedFinance(seasonIds: Map<string, string>) {
     },
   });
   await db.cashFlowEvent.create({
-    data: { seasonId: demirSeason, farmId: "farm-karatay-demir", kind: "OPENING_RESERVE",
+    data: { seasonId: demirSeason, farmId: "farm-harran-demir", kind: "OPENING_RESERVE",
       date: isoDateToUtcDate("2025-11-01"), amount: D("60000.00"), label: "Opening cash reserve", source: "FIXTURE" },
   });
 
   for (const [farmId, ref, principal, outstanding, due, amount] of [
-    ["farm-meram-ova", "ZRT-2026-0902", "880000.00", "700000.00", "2026-09-25", "260000.00"],
-    ["farm-altinekin-genis", "ZRT-2026-1044", "540000.00", "430000.00", "2026-09-18", "150000.00"],
+    ["farm-cumra-ova", "ZRT-2026-0902", "880000.00", "700000.00", "2026-09-25", "260000.00"],
+    ["farm-kumkale-genis", "ZRT-2026-1044", "540000.00", "430000.00", "2026-09-18", "150000.00"],
   ] as const) {
     await db.loan.create({
       data: {
@@ -403,7 +425,7 @@ async function seedWeather() {
       kind: "DEMO_SYNTHETIC",
       provenance: "Synthetic demo sequence generated for ClimaVex. Does not represent a real historical year.",
       attribution: "ClimaVex demo fixture",
-      stationOrGrid: "Konya (synthetic)",
+      stationOrGrid: "None (synthetic)",
       startDate: isoDateToUtcDate("2025-10-01"), endDate: isoDateToUtcDate("2026-09-30"),
       license: "Demo fixture — no external data used",
     },

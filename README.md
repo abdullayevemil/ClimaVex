@@ -82,7 +82,10 @@ password `climavex`:
 
 ## What to try
 
-1. **Zoom to Konya demo farms**, then pick *Yıldız Tarım — Çumra*.
+1. **Zoom to Harran demo farms**, then pick *Yıldız Tarım — Harran*. The four
+   demo farms sit on real cropland in three provinces — the Harran Plain
+   (Şanlıurfa), the Çumra plain (Konya) and the Kumkale plain (Çanakkale) — so
+   each gets the climate of a different model region.
 2. **Risk** tab → *Calculate risk score*. Every factor shows its weight, value
    and contribution — the score is readable, not a black box. The *Climate
    evidence* card shows what the ML service measured and forecast for the
@@ -187,6 +190,7 @@ Both are overridable with `NEXT_PUBLIC_SATELLITE_TILE_URL` and
 production traffic, so point these at your own tiles before deploying publicly.
 PostGIS is GPL-2.0 and is used over a database socket, not linked.
 
-The five-crop catalogue (wheat, barley, maize, sugar beet, sunflower) is a
-**provisional demo catalogue**. Konya cultivation-area statistics could not be
+The six-crop catalogue (wheat, barley, maize, sugar beet, sunflower, cotton) is a
+**provisional demo catalogue**, with one crop calendar shared by every province.
+Regional cultivation-area statistics could not be
 verified, so no ranking claim is made. See `PLAN.md` §9.

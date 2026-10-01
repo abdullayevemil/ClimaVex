@@ -12,7 +12,7 @@ await step(1, "Sign in as the farmer", async () => {
   await p.waitForSelector(".cvx-pin", { timeout: 20000 });
 });
 
-await step(2, "Open the Çumra farm", async () => {
+await step(2, "Open the Yıldız farm", async () => {
   await p.click("text=Yıldız Tarım");
   await p.waitForTimeout(2500);
 });

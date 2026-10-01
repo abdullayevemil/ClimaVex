@@ -15,7 +15,7 @@ export async function GET() {
     return ok({
       // Stated plainly rather than buried: the regional ranking is unverified.
       catalogueNote:
-        "Provisional demo crop catalogue for the Konya pilot. Regional ranking is not verified against official statistics.",
+        "Provisional demo crop catalogue. Regional ranking is not verified against official statistics.",
       defaultCropId: defaults[0]?.cropId ?? crops[0]?.id ?? null,
       crops: crops.map((c) => ({
         id: c.id, code: c.code, nameEn: c.nameEn, nameTr: c.nameTr,

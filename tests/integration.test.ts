@@ -20,7 +20,7 @@ let farmId: string;
 let seasonId: string;
 
 beforeAll(async () => {
-  const farm = await db.farm.findFirst({ where: { id: "farm-cumra-yildiz" }, include: { seasons: true } });
+  const farm = await db.farm.findFirst({ where: { id: "farm-harran-yildiz" }, include: { seasons: true } });
   if (!farm) throw new Error("Seed data missing — run `npm run seed` first.");
   farmId = farm.id;
   seasonId = farm.seasons[0].id;
@@ -31,17 +31,17 @@ afterAll(async () => { await db.$disconnect(); });
 describe("geometry triggers", () => {
   it("derives area from GeoJSON without the application computing it", async () => {
     const farm = await db.farm.findUniqueOrThrow({ where: { id: farmId } });
-    // ~1.9 km x 1.55 km at Konya's latitude.
+    // ~1.96 km x 1.55 km on the Harran Plain.
     expect(Number(farm.areaM2)).toBeGreaterThan(2_900_000);
     expect(Number(farm.areaM2)).toBeLessThan(3_100_000);
   });
 
   it("derives a centroid inside the field", async () => {
     const farm = await db.farm.findUniqueOrThrow({ where: { id: farmId } });
-    expect(farm.centroidLat).toBeGreaterThan(37.8);
-    expect(farm.centroidLat).toBeLessThan(37.9);
-    expect(farm.centroidLng).toBeGreaterThan(32.4);
-    expect(farm.centroidLng).toBeLessThan(32.6);
+    expect(farm.centroidLat).toBeGreaterThan(36.893);
+    expect(farm.centroidLat).toBeLessThan(36.907);
+    expect(farm.centroidLng).toBeGreaterThan(38.9425);
+    expect(farm.centroidLng).toBeLessThan(38.9645);
   });
 
   it("rejects GeoJSON that yields no polygon", async () => {

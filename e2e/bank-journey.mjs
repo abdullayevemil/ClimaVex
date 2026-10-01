@@ -50,7 +50,7 @@ await step(7, "Crop sections render on the map", async () => {
 });
 
 await step(8, "Cadastral reference shown in full form", async () => {
-  await page.waitForSelector("text=/Konya \\/ Çumra \\/ .* \\/ 463:21/");
+  await page.waitForSelector("text=/Şanlıurfa \\/ Harran \\/ .* \\/ 463:21/");
 });
 
 await step(9, "Risk score calculates", async () => {
