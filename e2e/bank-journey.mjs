@@ -28,8 +28,8 @@ await step(3, "Map workspace renders with tiles and farms", async () => {
   if (pins < 4) throw new Error(`expected >=4 farm pins, got ${pins}`);
 });
 
-await step(4, "Demo banner is present", async () => {
-  await page.waitForSelector("text=AI model not connected");
+await step(4, "AI status banner is present", async () => {
+  await page.waitForSelector("text=/AI model (connected|not connected|unreachable)/");
 });
 
 await step(5, "Farm list shows all demo farms with dekar areas", async () => {

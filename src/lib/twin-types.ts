@@ -1,4 +1,5 @@
 import type { ArealGeometry } from "@/domain/geometry/types";
+import type { ClimateEvidence } from "@/domain/scenario/contract";
 
 export type Area = { m2: number; hectares: number; dekar: number };
 
@@ -82,6 +83,7 @@ export type AssessmentDto = {
     farmId: string; seasonId: string; score: number; band: "LOW" | "MEDIUM" | "HIGH";
     factors: RiskFactorDto[]; providerType: string; providerVersion: string; inputHash: string;
     disclaimer: string; decisionSupportOnly: true;
+    climate?: ClimateEvidence; fallbackReason?: string;
   };
   runId: string;
   exposure: CropMixDto;

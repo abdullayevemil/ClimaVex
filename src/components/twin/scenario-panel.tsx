@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Stat } from "./stat";
 import { DecisionNote, DemoBanner } from "./demo-banner";
+import { RULES_DISCLAIMER } from "@/domain/scenario/contract";
 import { formatDateFull, formatPct, formatTRY } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ResourceDto, ScenarioRunDto, WeatherDatasetDto } from "@/lib/twin-types";
@@ -114,7 +115,7 @@ export function ScenarioPanel({ datasets, resources, run, busy, canRun, onRunWea
       </section>
 
       {run ? <ScenarioResult run={run} /> : null}
-      <DemoBanner compact />
+      <DemoBanner compact message={run?.impact.disclaimer ?? RULES_DISCLAIMER} />
       <DecisionNote />
     </div>
   );

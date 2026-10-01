@@ -11,6 +11,10 @@ import { computeLedger } from "@/server/repositories/cashflow-repo";
 import { assessFarmRisk, runScenario } from "@/server/repositories/scenario-service";
 import { TOLERANCES } from "@/domain/geometry/tolerances";
 
+// These tests cover the database, not the ML service, so they pin the rules:
+// they must pass with no AI service running and no network.
+process.env.PROVIDER = "deterministic";
+
 const db = new PrismaClient();
 let farmId: string;
 let seasonId: string;

@@ -67,8 +67,8 @@ export function SignIn() {
             ))}
           </ul>
           <p className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-            Demo simulation — AI model not connected. Predictive outputs come from a published,
-            deterministic rule set.
+            Climate risk is scored by the ClimaVex ML service when it is running, and by a
+            published deterministic rule set when it is not. Every score says which.
           </p>
         </div>
 

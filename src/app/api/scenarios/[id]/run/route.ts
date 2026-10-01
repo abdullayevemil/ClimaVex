@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { handle, ok } from "@/server/http";
 import { HttpError, requireScenarioRun } from "@/server/auth/guards";
 import { runScenario } from "@/server/repositories/scenario-service";
-import { DEMO_DISCLAIMER } from "@/domain/scenario/contract";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   return handle("POST /api/scenarios/[id]/run", async () => {
@@ -18,7 +17,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       reused: result.reused,
       impact: result.impact,
       financial: result.financial ?? result.run.financialResultJson,
-      disclaimer: DEMO_DISCLAIMER,
+      disclaimer: result.impact.disclaimer,
       note: "Decision support only — the bank retains the credit decision.",
     });
   });

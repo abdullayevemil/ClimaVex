@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FarmSidebar } from "./farm-sidebar";
 import { Inspector } from "./inspector";
 import { SeasonTimeline } from "./season-timeline";
-import { DemoBanner } from "./demo-banner";
+import { AiStatusBanner } from "./demo-banner";
 import { MapLegend } from "./map-legend";
 import { fetchJson } from "@/lib/fetch-json";
 import { BASEMAPS, DEFAULT_BASEMAP, MAP_CONFIG, type BasemapId } from "@/config/map";
@@ -301,7 +301,7 @@ export function TwinWorkspace({ user }: { user: SessionUserDto }) {
           ) : null}
         </div>
 
-        <DemoBanner compact className="hidden md:flex" />
+        <AiStatusBanner className="hidden md:flex" />
 
         <div className="flex items-center gap-2">
           <div className="hidden text-right sm:block">

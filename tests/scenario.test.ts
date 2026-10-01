@@ -3,9 +3,10 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { DeterministicImpactProvider, RULESET_VERSION } from "@/domain/scenario/deterministic-provider";
 import { DeterministicRiskProvider, bandForScore } from "@/domain/scenario/risk-provider";
+import { TrainedModelRiskProvider } from "@/domain/scenario/trained-risk-provider";
 import { resolveProviderMode } from "@/domain/scenario/providers";
 import { canonicalise, inputHash } from "@/domain/scenario/hash";
-import { IMPACT_CONTRACT_VERSION, DEMO_DISCLAIMER, type CropCoefficients, type ImpactRequest, type RiskRequest, type SectionSnapshot } from "@/domain/scenario/contract";
+import { IMPACT_CONTRACT_VERSION, RULES_DISCLAIMER, type ClimateEvidence, type CropCoefficients, type ImpactRequest, type RiskRequest, type SectionSnapshot } from "@/domain/scenario/contract";
 
 const WHEAT: CropCoefficients = {
   cropCode: "WHEAT", cropName: "Wheat", isIrrigated: true,
@@ -43,11 +44,11 @@ const hotDry = Array.from({ length: 35 }, (_, i) => ({
 }));
 
 describe("provider selection", () => {
-  it("accepts only the deterministic provider in this phase", () => {
+  it("accepts the rules and the ML service, and nothing else", () => {
     expect(resolveProviderMode(undefined)).toBe("deterministic");
     expect(resolveProviderMode("deterministic")).toBe("deterministic");
-    expect(() => resolveProviderMode("trained-model")).toThrowError(/not connected/);
-    expect(() => resolveProviderMode("openai")).toThrowError(/only accepted value/);
+    expect(resolveProviderMode("trained-model")).toBe("trained-model");
+    expect(() => resolveProviderMode("openai")).toThrowError(/Accepted values/);
   });
 });
 
@@ -108,9 +109,9 @@ describe("deterministic impact provider", () => {
     expect(heat?.explanation).toMatch(/^1 day\(s\)/);
   });
 
-  it("carries the demo disclaimer and full provenance", async () => {
+  it("says it is rule-based and carries full provenance", async () => {
     const result = await new DeterministicImpactProvider().estimate(weatherRequest(hotDry));
-    expect(result.disclaimer).toBe(DEMO_DISCLAIMER);
+    expect(result.disclaimer).toBe(RULES_DISCLAIMER);
     expect(result.providerType).toBe("deterministic-rules");
     expect(result.providerVersion).toBe(RULESET_VERSION);
     expect(result.inputHash).toHaveLength(64);
@@ -170,6 +171,81 @@ describe("deterministic risk provider", () => {
     expect(bandForScore(40)).toBe("MEDIUM");
     expect(bandForScore(69.9)).toBe("MEDIUM");
     expect(bandForScore(70)).toBe("HIGH");
+  });
+});
+
+describe("ML-backed risk provider", () => {
+  const request: RiskRequest = {
+    contractVersion: IMPACT_CONTRACT_VERSION, farmId: "f1", seasonId: "se1",
+    sections: [{ ...section, expectedRevenue: "1000000.00" }],
+    cropMixExposedShare: 0.7, topCropShare: 0.5, sharedResourceShare: 0.4,
+    repaymentStressShare: 0.3, weatherStressPct: 0,
+    location: { lat: 37.87, lng: 32.48 },
+    assumptions: { rulesetVersion: "1.0.0" },
+  };
+
+  const evidence: ClimateEvidence = {
+    region: { id: "konya-wheat-district", name: "Konya Wheat District", distanceKm: 1.2 },
+    index: {
+      asOf: "2026-07", riskScore: 60, riskLevel: 3, dominantHazard: "drought",
+      subScores: { drought: 70, flood: 0, heat: 40, soil: 80, vegetation: 30 },
+    },
+    forecast: {
+      targetYear: 2026, targetMonth: 8, currentSoilAnomaly: -0.4, predictedSoilAnomaly: -1,
+      droughtStress: 68.3, direction: "drying", interpretation: "Root-zone soil moisture is forecast below normal — early drought signal.",
+      correlation: 0.46, r2VsClimatology: 0.21,
+    },
+    model: { serviceVersion: "0.2.0", trainedAt: "2026-09-28T12:35:42+00:00" },
+  };
+  const connected = new TrainedModelRiskProvider(async () => evidence);
+
+  it("replaces the weather term with the measured index and the forecast", async () => {
+    const result = await connected.assess(request);
+    const rules = await new DeterministicRiskProvider().assess(request);
+
+    expect(result.providerType).toBe("trained-model");
+    expect(result.providerVersion).toBe("0.2.0+2026-09-28");
+    expect(result.climate).toEqual(evidence);
+    expect(result.factors.map((f) => f.code)).toEqual([
+      "CROP_MIX_CONCENTRATION", "SHARED_RESOURCE_DEPENDENCE", "REPAYMENT_TIMING_STRESS",
+      "SINGLE_CROP_DOMINANCE", "CLIMATE_STRESS_INDEX", "DROUGHT_FORECAST",
+    ]);
+    // The weights are still a whole: the weather weight is split, not added to.
+    expect(result.factors.reduce((a, f) => a + f.weight, 0)).toBeCloseTo(1, 10);
+    // 0.18 weather weight: 60% on the measured 60, 40% on the forecast 68.3.
+    expect(result.score).toBeCloseTo(rules.score + 0.108 * 60 + 0.072 * 68.3, 0);
+    expect(Math.abs(result.factors.reduce((a, f) => a + f.contribution, 0) - result.score)).toBeLessThan(0.15);
+  });
+
+  it("gives the measurement the whole weather weight when there is no forecast", async () => {
+    const result = await new TrainedModelRiskProvider(async () => ({ ...evidence, forecast: null })).assess(request);
+    expect(result.factors.map((f) => f.code)).not.toContain("DROUGHT_FORECAST");
+    expect(result.factors.find((f) => f.code === "CLIMATE_STRESS_INDEX")?.weight).toBe(0.18);
+  });
+
+  it("stores a new run when the observations move on", async () => {
+    const later = new TrainedModelRiskProvider(async () => ({ ...evidence, index: { ...evidence.index, asOf: "2026-08", riskScore: 61 } }));
+    expect((await connected.assess(request)).inputHash).toBe((await connected.assess(request)).inputHash);
+    expect((await later.assess(request)).inputHash).not.toBe((await connected.assess(request)).inputHash);
+  });
+
+  it("falls back to the rules, and says so, when the service cannot answer", async () => {
+    const down = new TrainedModelRiskProvider(async () => { throw new Error("ML service is not reachable."); });
+    const result = await down.assess(request);
+    const rules = await new DeterministicRiskProvider().assess(request);
+
+    expect(result.providerType).toBe("deterministic-rules");
+    expect(result.score).toBe(rules.score);
+    expect(result.climate).toBeUndefined();
+    expect(result.fallbackReason).toBe("ML service is not reachable.");
+    expect(result.disclaimer).toMatch(/AI model unavailable/);
+  });
+
+  it("never returns a lending verdict", async () => {
+    const body = JSON.stringify(await connected.assess(request)).toLowerCase();
+    for (const word of ["approved", "declined", "verdict", "eligibility", "recommendation"]) {
+      expect(body).not.toContain(word);
+    }
   });
 });
 

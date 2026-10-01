@@ -1,11 +1,11 @@
 import { handle, ok } from "@/server/http";
 import { HttpError, requireFarmRead } from "@/server/auth/guards";
 import { assessFarmRisk } from "@/server/repositories/scenario-service";
-import { DEMO_DISCLAIMER } from "@/domain/scenario/contract";
 
 /**
- * The headline output for bank and insurance users: a deterministic,
- * explainable risk score for one farm-season.
+ * The headline output for bank and insurance users: an explainable risk score
+ * for one farm-season, with the climate side supplied by the ML service when
+ * it is connected.
  *
  * Deliberately absent from the response: any approve/decline verdict,
  * eligibility outcome, or recommended limit presented as a decision. The
@@ -26,7 +26,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       runId: result.runId,
       exposure: result.exposure,
       ledger: result.ledger,
-      disclaimer: DEMO_DISCLAIMER,
+      disclaimer: result.assessment.disclaimer,
       note: "Decision support only — the bank retains the credit decision.",
     });
   });

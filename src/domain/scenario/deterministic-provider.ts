@@ -1,5 +1,5 @@
 import {
-  DEMO_DISCLAIMER, IMPACT_CONTRACT_VERSION,
+  RULES_DISCLAIMER, IMPACT_CONTRACT_VERSION,
   type AffectedSection, type CropCoefficients, type ImpactFactor,
   type ImpactRequest, type ImpactResponse, type ScenarioImpactProvider,
   type SectionSnapshot, type WeatherObservationInput,
@@ -10,7 +10,9 @@ import { addDays, diffDays, eachDay, type IsoDate } from "../finance/dates";
 export const RULESET_VERSION = "1.0.0";
 
 /**
- * Transparent, deterministic impact rules standing in for the trained model.
+ * Transparent, deterministic impact rules. The ML service measures and
+ * forecasts regional climate; it does not model how a crop responds to a
+ * replayed season, so scenario effects are rule-based by design.
  *
  * Every coefficient comes from the crop catalogue in the database and is
  * surfaced in the UI as an editable demo assumption. There is no randomness,
@@ -82,7 +84,7 @@ export class DeterministicImpactProvider implements ScenarioImpactProvider {
         weatherKind: request.scenarioInputs.weather?.kind,
         assumptionSources: [`ruleset ${request.assumptions.rulesetVersion}`],
       },
-      disclaimer: DEMO_DISCLAIMER,
+      disclaimer: RULES_DISCLAIMER,
     };
   }
 }

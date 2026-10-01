@@ -11,6 +11,7 @@ import { assessPayout, policyFromRow } from "@/domain/finance/insurance";
 import { computeLedger } from "./cashflow-repo";
 import type { LedgerEvent } from "@/domain/finance/ledger";
 import type { MultiPolygonGeometry } from "@/domain/geometry/types";
+import { climateEvidenceFor } from "@/server/ml/client";
 
 const HAZARD_BY_KIND: Record<string, string> = {
   WEATHER_REPLAY: "DROUGHT",
@@ -78,8 +79,8 @@ export async function loadSectionSnapshots(farmId: string, seasonId: string) {
  *
  * Note the ordering and the separation. The provider supplies percentage
  * deltas and nothing else; this function turns those into money using the
- * deterministic finance modules. A future trained model changes the first step
- * and cannot touch the second.
+ * deterministic finance modules. Whatever sits behind the provider can change
+ * the first step and cannot touch the second.
  */
 export async function runScenario(scenarioId: string) {
   const scenario = await prisma.scenario.findUnique({
@@ -215,7 +216,10 @@ export async function runScenario(scenarioId: string) {
 
 /** The headline risk score for bank and insurance users. */
 export async function assessFarmRisk(farmId: string, seasonId: string, requestedById: string | null) {
-  const { revenueInputs, snapshots } = await loadSectionSnapshots(farmId, seasonId);
+  const [{ revenueInputs, snapshots }, farm] = await Promise.all([
+    loadSectionSnapshots(farmId, seasonId),
+    prisma.farm.findUnique({ where: { id: farmId }, select: { centroidLat: true, centroidLng: true } }),
+  ]);
   if (revenueInputs.length === 0) throw new Error("This season has no cultivation sections to assess.");
 
   const rows = revenueInputs.map(sectionRevenue);
@@ -247,7 +251,7 @@ export async function assessFarmRisk(farmId: string, seasonId: string, requested
     ? 0
     : Math.min(Number(money(ledger.peakShortfall).dividedBy(scheduledTotal).toFixed(6)), 1);
 
-  const provider = getRiskProvider();
+  const provider = getRiskProvider(climateEvidenceFor);
   const response = await provider.assess({
     contractVersion: IMPACT_CONTRACT_VERSION,
     farmId,
@@ -258,6 +262,7 @@ export async function assessFarmRisk(farmId: string, seasonId: string, requested
     sharedResourceShare: totalRevenue.isZero() ? 0 : Number(sharedRevenue.dividedBy(totalRevenue).toFixed(6)),
     repaymentStressShare,
     weatherStressPct: 0,
+    location: farm ? { lat: farm.centroidLat, lng: farm.centroidLng } : undefined,
     assumptions: { rulesetVersion: RISK_RULESET_VERSION },
   });
 
